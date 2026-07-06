@@ -18,6 +18,12 @@ body {
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
 }
 
+/* ── Dot grid background pattern ── */
+.dot-grid {
+  background-image: radial-gradient(circle, rgba(96, 165, 250, 0.07) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
 /* ── Dashboard animations ── */
 
 @keyframes rise-in {
@@ -35,6 +41,16 @@ body {
   to   { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes glow-pulse {
+  0%, 100% { opacity: 0.15; }
+  50%       { opacity: 0.28; }
+}
+
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
 .anim-rise {
   animation: rise-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
@@ -47,8 +63,16 @@ body {
   animation: expand-in 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+.anim-glow {
+  animation: glow-pulse 4s ease-in-out infinite;
+}
+
+.anim-spin-slow {
+  animation: spin-slow 1s linear infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .anim-rise, .anim-pop, .anim-expand {
+  .anim-rise, .anim-pop, .anim-expand, .anim-glow, .anim-spin-slow {
     animation: none;
   }
 }
