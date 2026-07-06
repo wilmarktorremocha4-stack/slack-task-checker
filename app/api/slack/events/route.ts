@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { verifySlackSignature, getSlackUserName, postThreadReply } from "@/lib/slack";
+import { verifySlackSignature, getSlackUserName, postThreadReply, getSlackClient } from "@/lib/slack";
 import { createSupabaseAdmin } from "@/lib/supabase";
 import { parseTaskFromMessage } from "@/lib/openai-messages";
 import { calculateNextFollowupAt } from "@/lib/followup-schedule";
@@ -87,12 +87,23 @@ async function handleNewTaskMention(
   const threadTs = (event.thread_ts as string) || (event.ts as string);
   const senderId = event.user as string;
 
+  // Get the bot's own user ID so we can exclude it from the assignee list
+  let botUserId = "";
+  try {
+    const slack = getSlackClient();
+    const authResult = await slack.auth.test();
+    botUserId = authResult.user_id ?? "";
+  } catch {
+    // continue without bot ID filter if this fails
+  }
+
   const mentionPattern = /<@([A-Z0-9]+)>/g;
   const mentions = [...messageText.matchAll(mentionPattern)]
     .map(m => m[1])
-    .filter(id => id !== brandonUserId);
+    .filter(id => id !== brandonUserId && id !== botUserId);
 
   const cleanMessage = messageText.replace(/<@[A-Z0-9]+>/g, "").trim();
+  console.log("[slack] mentions after filter:", mentions, "botUserId:", botUserId);
 
   if (mentions.length === 0 || !cleanMessage) {
     await postThreadReply(
