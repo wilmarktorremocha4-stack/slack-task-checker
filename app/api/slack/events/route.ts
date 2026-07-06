@@ -187,7 +187,8 @@ async function handleThreadReply(
   supabase: ReturnType<typeof createSupabaseAdmin>
 ) {
   const threadTs = event.thread_ts as string;
-  const messageText = ((event.text as string) || "").toLowerCase().trim();
+  const rawText = (event.text as string) || "";
+  const messageText = rawText.toLowerCase().trim();
   const userId = event.user as string;
 
   console.log("[reply] looking up task for thread_ts:", threadTs, "userId:", userId);
@@ -205,8 +206,10 @@ async function handleThreadReply(
   }
 
   const isAssignee = userId === task.assigned_to_id;
+
+  // Broad set of completion phrases
   const isDoneMessage =
-    /\b(done|completed|finished|complete|all done|sorted|did it|it's done|it is done)\b/.test(
+    /\b(done|completed|finished|complete|all done|sorted|did it|it'?s done|it is done|submitted|sent|delivered|wrapped up|wrapped it up|good to go|ready|all set|taken care of|handled|checked|accomplished)\b/.test(
       messageText
     );
 
@@ -222,12 +225,27 @@ async function handleThreadReply(
       })
       .eq("id", task.id);
 
+    // Celebrate in the thread
     await postThreadReply(
       task.channel_id,
       task.thread_ts,
       `🎉 Great work ${task.assigned_to_name}! Task marked as complete:\n> ${task.task_text}\n\nI'll stop the follow-ups. Nice one!`
     );
 
-    console.log("[reply] task marked complete:", task.id);
+    // DM Brandon so he knows it's done
+    const brandonUserId = process.env.SLACK_BRANDON_USER_ID!;
+    const { sendDirectMessage } = await import("@/lib/slack");
+    await sendDirectMessage(
+      brandonUserId,
+      `✅ *Task Completed*\n\n*Assignee:* ${task.assigned_to_name}\n*Task:* ${task.task_text}\n*Completed after:* ${task.followup_count} follow-up(s)\n\n${task.assigned_to_name} marked this done in the thread.`
+    );
+
+    console.log("[reply] task marked complete, Brandon notified:", task.id);
+    return;
+  }
+
+  // Non-completion replies (e.g. "got it", "noted") — acknowledge but keep following up
+  if (isAssignee && messageText.length > 0) {
+    console.log("[reply] assignee replied but not done — no action, follow-ups continue");
   }
 }
