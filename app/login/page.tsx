@@ -16,6 +16,9 @@ function Spinner() {
   );
 }
 
+const INPUT_CLS =
+  "w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-sm text-white placeholder-white/35 hover:border-white/35 focus:outline-none focus:ring-2 focus:ring-white/30 focus:border-white/40 transition-all";
+
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -73,40 +76,33 @@ function LoginForm() {
   };
 
   return (
-    <main className="min-h-screen relative flex items-center justify-center p-4 bg-[#050e24] overflow-hidden">
-      {/* Dot grid */}
-      <div className="pointer-events-none absolute inset-0 dot-grid" />
-
-      {/* Glow orbs */}
-      <div className="pointer-events-none absolute -top-40 -left-40 w-[600px] h-[500px] rounded-full bg-blue-600/15 blur-[140px] anim-glow" />
-      <div className="pointer-events-none absolute -bottom-60 -right-40 w-[500px] h-[500px] rounded-full bg-blue-800/15 blur-[120px] anim-glow" style={{ animationDelay: "2s" }} />
-      <div className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[300px] rounded-full bg-indigo-900/10 blur-[100px]" />
-
+    <main
+      className="min-h-screen flex items-center justify-center p-4 overflow-hidden"
+      style={{ background: "linear-gradient(180deg, #060d24 0%, #0d2f7a 28%, #1565c0 56%, #1e88e5 76%, #42a5f5 100%)" }}
+    >
       <div className="relative w-full max-w-md anim-pop">
-        {/* Logo */}
+        {/* Brand */}
         <div className="flex flex-col items-center mb-8">
-          <div className="w-16 h-16 rounded-2xl flex items-center justify-center shadow-2xl shadow-blue-500/40 mb-4 ring-1 ring-blue-400/20"
-            style={{ background: "linear-gradient(135deg, #1d4ed8 0%, #3b82f6 50%, #60a5fa 100%)" }}>
-            <svg className="w-8 h-8 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9 11l3 3L22 4" />
-              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
-            </svg>
-          </div>
-          <h1 className="text-2xl font-bold tracking-tight bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent">Task Tracker</h1>
-          <p className="text-slate-500 text-sm mt-1">Internal Access Only</p>
+          <h1 className="text-5xl font-black tracking-tight text-white drop-shadow-lg mb-1">
+            Task{" "}
+            <span style={{ background: "linear-gradient(90deg, #93c5fd, #ffffff, #bfdbfe)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
+              Tracker
+            </span>
+          </h1>
+          <p className="text-white/50 text-sm">Internal Access Only</p>
         </div>
 
-        {/* Card */}
-        <div className="bg-slate-900/80 backdrop-blur-xl border border-slate-700/60 rounded-3xl shadow-2xl shadow-black/60 p-8">
-          <h2 className="text-2xl font-bold mb-6 text-center bg-gradient-to-r from-blue-400 via-blue-300 to-white bg-clip-text text-transparent tracking-tight">
+        {/* Glass card */}
+        <div className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-3xl shadow-2xl p-8">
+          <h2 className="text-xl font-bold mb-6 text-center text-white tracking-tight">
             {titles[mode].heading}
           </h2>
 
           {message && (
             <div className={`mb-5 px-4 py-3 rounded-xl text-sm border ${
               message.ok
-                ? "bg-emerald-950/60 border-emerald-500/30 text-emerald-300"
-                : "bg-rose-950/60 border-rose-500/30 text-rose-300"
+                ? "bg-emerald-500/20 border-emerald-400/30 text-emerald-200"
+                : "bg-rose-500/20 border-rose-400/30 text-rose-200"
             }`}>
               {message.text}
             </div>
@@ -114,39 +110,39 @@ function LoginForm() {
 
           <form onSubmit={submit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-slate-400 mb-1.5">Email</label>
+              <label className="block text-sm font-medium text-white/70 mb-1.5">Email</label>
               <input
                 type="email" required autoComplete="email" value={email}
                 onChange={e => setEmail(e.target.value)} placeholder="you@operationamz.com"
-                className="w-full bg-slate-800/60 border border-slate-700/60 rounded-xl px-4 py-3 text-sm text-slate-200 placeholder-slate-500 hover:border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/50 transition-all"
+                className={INPUT_CLS}
               />
             </div>
 
             {mode !== "forgot" && (
               <div>
-                <label className="block text-sm font-medium text-slate-400 mb-1.5">Password</label>
+                <label className="block text-sm font-medium text-white/70 mb-1.5">Password</label>
                 <input
                   type="password" required autoComplete={mode === "signup" ? "new-password" : "current-password"}
                   value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••"
-                  className="w-full bg-slate-800/60 border border-slate-700/60 rounded-xl px-4 py-3 text-sm text-slate-200 placeholder-slate-500 hover:border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/50 transition-all"
+                  className={INPUT_CLS}
                 />
               </div>
             )}
 
             {mode === "signup" && (
               <div>
-                <label className="block text-sm font-medium text-slate-400 mb-1.5">Confirm password</label>
+                <label className="block text-sm font-medium text-white/70 mb-1.5">Confirm password</label>
                 <input
                   type="password" required autoComplete="new-password"
                   value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} placeholder="••••••••"
-                  className="w-full bg-slate-800/60 border border-slate-700/60 rounded-xl px-4 py-3 text-sm text-slate-200 placeholder-slate-500 hover:border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/50 transition-all"
+                  className={INPUT_CLS}
                 />
               </div>
             )}
 
             {mode === "signin" && (
               <div className="text-right">
-                <button type="button" onClick={() => { setMode("forgot"); setMessage(null); }} className="text-xs text-blue-400 hover:text-blue-300 hover:underline underline-offset-2 font-medium transition-colors">
+                <button type="button" onClick={() => { setMode("forgot"); setMessage(null); }} className="text-xs text-white/60 hover:text-white hover:underline underline-offset-2 font-medium transition-colors">
                   Forgot password?
                 </button>
               </div>
@@ -154,18 +150,18 @@ function LoginForm() {
 
             <button
               type="submit" disabled={busy}
-              className="w-full inline-flex items-center justify-center gap-2.5 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 hover:shadow-xl hover:shadow-blue-500/30 hover:-translate-y-0.5 disabled:opacity-60 disabled:hover:translate-y-0 text-white font-semibold text-sm py-3.5 rounded-xl shadow-lg shadow-blue-500/25 transition-all active:scale-[0.98]"
+              className="w-full inline-flex items-center justify-center gap-2.5 bg-white/20 hover:bg-white/30 border border-white/30 hover:border-white/50 disabled:opacity-60 text-white font-semibold text-sm py-3.5 rounded-xl shadow-lg transition-all active:scale-[0.98] backdrop-blur-sm"
             >
               {busy && <Spinner />}
               {busy ? "Please wait..." : titles[mode].cta}
             </button>
           </form>
 
-          <div className="mt-6 pt-5 border-t border-slate-700/40 text-center text-sm text-slate-500">
+          <div className="mt-6 pt-5 border-t border-white/15 text-center text-sm text-white/50">
             {mode === "signin" && (
               <>
                 No account yet?{" "}
-                <button onClick={() => { setMode("signup"); setMessage(null); }} className="text-blue-400 hover:text-blue-300 hover:underline underline-offset-2 font-semibold transition-colors">
+                <button onClick={() => { setMode("signup"); setMessage(null); }} className="text-white/80 hover:text-white hover:underline underline-offset-2 font-semibold transition-colors">
                   Sign up
                 </button>
               </>
@@ -173,20 +169,20 @@ function LoginForm() {
             {mode === "signup" && (
               <>
                 Already have an account?{" "}
-                <button onClick={() => { setMode("signin"); setMessage(null); }} className="text-blue-400 hover:text-blue-300 hover:underline underline-offset-2 font-semibold transition-colors">
+                <button onClick={() => { setMode("signin"); setMessage(null); }} className="text-white/80 hover:text-white hover:underline underline-offset-2 font-semibold transition-colors">
                   Sign in
                 </button>
               </>
             )}
             {mode === "forgot" && (
-              <button onClick={() => { setMode("signin"); setMessage(null); }} className="text-blue-400 hover:text-blue-300 hover:underline underline-offset-2 font-semibold transition-colors">
+              <button onClick={() => { setMode("signin"); setMessage(null); }} className="text-white/80 hover:text-white hover:underline underline-offset-2 font-semibold transition-colors">
                 ← Back to sign in
               </button>
             )}
           </div>
         </div>
 
-        <p className="text-center text-xs text-slate-600 mt-6">
+        <p className="text-center text-xs text-white/30 mt-6">
           Access is limited to authorized team members.
         </p>
       </div>

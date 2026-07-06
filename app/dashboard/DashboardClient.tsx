@@ -12,13 +12,15 @@ type ToastType = { id: number; message: string; ok: boolean };
 type TaskAction = "approve" | "cancel" | "revision" | "followup_now" | "reopen" | "message";
 type SortBy = "status" | "date_desc" | "date_asc";
 
+const GRADIENT_BG = "linear-gradient(180deg, #060d24 0%, #0d2f7a 28%, #1565c0 56%, #1e88e5 76%, #42a5f5 100%)";
+
 const STATUS = {
-  active:             { label: "Active",        badge: "bg-blue-500/20 text-blue-300 border-blue-500/30",       dot: "bg-blue-400" },
-  pending_review:     { label: "Needs Review",  badge: "bg-amber-500/20 text-amber-300 border-amber-500/30",    dot: "bg-amber-400" },
-  revision_requested: { label: "Revision Sent", badge: "bg-orange-500/20 text-orange-300 border-orange-500/30", dot: "bg-orange-400" },
-  completed:          { label: "Done",          badge: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30", dot: "bg-emerald-400" },
-  escalated:          { label: "Escalated",     badge: "bg-rose-500/20 text-rose-300 border-rose-500/30",       dot: "bg-rose-400" },
-  cancelled:          { label: "Cancelled",     badge: "bg-slate-700/60 text-slate-400 border-slate-600/30",    dot: "bg-slate-500" },
+  active:             { label: "Active",        badge: "bg-blue-400/20 text-blue-200 border-blue-400/30",       dot: "bg-blue-300" },
+  pending_review:     { label: "Needs Review",  badge: "bg-amber-400/20 text-amber-200 border-amber-400/30",    dot: "bg-amber-300" },
+  revision_requested: { label: "Revision Sent", badge: "bg-orange-400/20 text-orange-200 border-orange-400/30", dot: "bg-orange-300" },
+  completed:          { label: "Done",          badge: "bg-emerald-400/20 text-emerald-200 border-emerald-400/30", dot: "bg-emerald-300" },
+  escalated:          { label: "Escalated",     badge: "bg-rose-400/20 text-rose-200 border-rose-400/30",       dot: "bg-rose-300" },
+  cancelled:          { label: "Cancelled",     badge: "bg-white/10 text-white/50 border-white/20",             dot: "bg-white/40" },
 } as const;
 
 const FILTERS = [
@@ -44,13 +46,20 @@ function formatDate(d: string) {
   return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
-function nextIn(d: string | null) {
+function formatDateTime(d: string) {
+  return new Date(d).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hour12: true });
+}
+
+function nextInLabel(d: string | null): { label: string; isOverdue: boolean } | null {
   if (!d) return null;
   const diff = new Date(d).getTime() - Date.now();
-  if (diff < 0) return "overdue";
+  if (diff < 0) {
+    return { label: `Overdue · ${formatDateTime(d)}`, isOverdue: true };
+  }
   const h = Math.floor(diff / 3600000);
   const m = Math.floor((diff % 3600000) / 60000);
-  return h > 0 ? `in ${h}h ${m}m` : `in ${m}m`;
+  const label = h > 0 ? `Next in ${h}h ${m}m · ${formatDateTime(d)}` : `Next in ${m}m · ${formatDateTime(d)}`;
+  return { label, isOverdue: false };
 }
 
 function sortByStatus(tasks: TaskWithComments[]) {
@@ -80,6 +89,20 @@ function groupByEmployee(tasks: TaskWithComments[]) {
   }
   return map;
 }
+
+// Parse Slack mrkdwn mention syntax for display
+function parseSlackContent(text: string, userMap: Record<string, string>): string {
+  return text
+    .replace(/<@([A-Z0-9]+)>/g, (_, id) => `@${userMap[id] ?? id}`)
+    .replace(/<([^|>]+)\|([^>]+)>/g, "$2")
+    .replace(/<([^>]+)>/g, "$1");
+}
+
+// ── Glass card base style ────────────────────────────────────────────────────
+
+const GLASS = "bg-white/[0.12] backdrop-blur-xl border border-white/20";
+const GLASS_HOVER = "hover:bg-white/[0.18] hover:border-white/30";
+const INPUT_CLS = "w-full bg-white/10 border border-white/20 rounded-xl px-4 py-2.5 text-sm text-white placeholder-white/35 hover:border-white/30 focus:outline-none focus:ring-2 focus:ring-white/25 focus:border-white/35 transition-all";
 
 // ── Icons ───────────────────────────────────────────────────────────────────
 
@@ -114,20 +137,6 @@ function IconSend() {
 function IconUser() {
   return <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>;
 }
-
-function AppLogo({ size = "md" }: { size?: "sm" | "md" | "lg" }) {
-  const dim = size === "sm" ? "w-8 h-8" : size === "lg" ? "w-16 h-16" : "w-11 h-11";
-  const icon = size === "sm" ? "w-4 h-4" : size === "lg" ? "w-8 h-8" : "w-5 h-5";
-  return (
-    <div className={`${dim} rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/30 shrink-0`}
-      style={{ background: "linear-gradient(135deg, #1d4ed8 0%, #3b82f6 50%, #60a5fa 100%)" }}>
-      <svg className={`${icon} text-white`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M9 11l3 3L22 4" />
-        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
-      </svg>
-    </div>
-  );
-}
 function IconSpinner() {
   return (
     <svg className="w-4 h-4 anim-spin-slow" viewBox="0 0 24 24" fill="none">
@@ -135,6 +144,9 @@ function IconSpinner() {
       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
     </svg>
   );
+}
+function IconBarChart() {
+  return <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="12" width="4" height="9" rx="1" /><rect x="10" y="7" width="4" height="14" rx="1" /><rect x="17" y="3" width="4" height="18" rx="1" /></svg>;
 }
 
 // ── Toast ───────────────────────────────────────────────────────────────────
@@ -145,7 +157,7 @@ function Toast({ toasts }: { toasts: ToastType[] }) {
     <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2 pointer-events-none">
       {toasts.map(t => (
         <div key={t.id} className={`px-4 py-3 rounded-xl text-sm font-medium shadow-xl border backdrop-blur-xl ${
-          t.ok ? "bg-emerald-950/90 border-emerald-500/30 text-emerald-300" : "bg-rose-950/90 border-rose-500/30 text-rose-300"
+          t.ok ? "bg-emerald-500/30 border-emerald-400/30 text-emerald-100" : "bg-rose-500/30 border-rose-400/30 text-rose-100"
         }`}>
           {t.ok ? "✓" : "✗"} {t.message}
         </div>
@@ -160,18 +172,18 @@ function ConfirmDialog({ title, body, confirmLabel, danger, onConfirm, onClose }
   title: string; body: string; confirmLabel: string; danger?: boolean; onConfirm: () => void; onClose: () => void;
 }) {
   return createPortal(
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-slate-900/95 backdrop-blur-xl border border-slate-700/60 rounded-2xl w-full max-w-sm shadow-2xl shadow-black/50 p-6 anim-pop">
-        <h3 className="text-base font-semibold text-slate-100 mb-2">{title}</h3>
-        <p className="text-sm text-slate-400 mb-6 leading-relaxed">{body}</p>
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className={`${GLASS} rounded-2xl w-full max-w-sm shadow-2xl p-6 anim-pop`}>
+        <h3 className="text-base font-semibold text-white mb-2">{title}</h3>
+        <p className="text-sm text-white/65 mb-6 leading-relaxed">{body}</p>
         <div className="flex gap-3">
-          <button onClick={onClose} className="flex-1 bg-slate-800 border border-slate-700 hover:bg-slate-700 text-slate-300 font-medium text-sm py-2.5 rounded-xl transition-all active:scale-[0.98]">
+          <button onClick={onClose} className={`flex-1 ${GLASS} ${GLASS_HOVER} text-white/80 font-medium text-sm py-2.5 rounded-xl transition-all active:scale-[0.98]`}>
             Keep as is
           </button>
           <button
             onClick={() => { onConfirm(); onClose(); }}
             className={`flex-1 font-semibold text-sm py-2.5 rounded-xl text-white transition-all active:scale-[0.98] shadow-lg ${
-              danger ? "bg-rose-600 hover:bg-rose-700 shadow-rose-500/20" : "bg-blue-600 hover:bg-blue-700 shadow-blue-500/20"
+              danger ? "bg-rose-500/40 hover:bg-rose-500/60 border border-rose-400/30" : "bg-blue-500/40 hover:bg-blue-500/60 border border-blue-400/30"
             }`}
           >
             {confirmLabel}
@@ -185,12 +197,14 @@ function ConfirmDialog({ title, body, confirmLabel, danger, onConfirm, onClose }
 
 // ── Comment bubble ──────────────────────────────────────────────────────────
 
-function CommentBubble({ c }: { c: TaskComment }) {
+function CommentBubble({ c, userMap }: { c: TaskComment; userMap: Record<string, string> }) {
+  const content = parseSlackContent(c.content, userMap);
+
   if (c.author_type === "system") {
     return (
       <div className="flex justify-center my-1">
-        <span className="text-xs text-slate-500 italic px-3 py-1 bg-slate-800/60 rounded-full text-center border border-slate-700/30">
-          {c.content} · {timeAgo(c.created_at)}
+        <span className="text-xs text-white/45 italic px-3 py-1 bg-white/10 rounded-full text-center border border-white/15">
+          {content} · {timeAgo(c.created_at)}
         </span>
       </div>
     );
@@ -199,18 +213,18 @@ function CommentBubble({ c }: { c: TaskComment }) {
   return (
     <div className={`flex gap-2 ${isBrandon ? "flex-row-reverse" : "flex-row"}`}>
       <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
-        isBrandon ? "bg-gradient-to-br from-blue-500 to-blue-700 text-white" : "bg-slate-700 text-slate-300"
+        isBrandon ? "bg-white/30 text-white" : "bg-white/15 text-white/80"
       }`}>
         {c.author_name.charAt(0).toUpperCase()}
       </div>
       <div className={`max-w-[75%] ${isBrandon ? "items-end" : "items-start"} flex flex-col`}>
-        <span className="text-xs text-slate-500 mb-1 px-1">{c.author_name} · {timeAgo(c.created_at)}</span>
+        <span className="text-xs text-white/45 mb-1 px-1">{c.author_name} · {timeAgo(c.created_at)}</span>
         <div className={`px-3.5 py-2 rounded-2xl text-sm leading-relaxed ${
           isBrandon
-            ? "bg-gradient-to-br from-blue-600 to-blue-800 text-white rounded-tr-sm shadow-lg shadow-blue-500/20"
-            : "bg-slate-800 border border-slate-700/60 text-slate-200 rounded-tl-sm"
+            ? "bg-white/25 border border-white/30 text-white rounded-tr-sm"
+            : "bg-white/10 border border-white/15 text-white/90 rounded-tl-sm"
         }`}>
-          {c.content}
+          {content}
         </div>
       </div>
     </div>
@@ -219,11 +233,12 @@ function CommentBubble({ c }: { c: TaskComment }) {
 
 // ── Task Card ───────────────────────────────────────────────────────────────
 
-function TaskCard({ task, expanded, onToggle, onAction }: {
+function TaskCard({ task, expanded, onToggle, onAction, userMap }: {
   task: TaskWithComments;
   expanded: boolean;
   onToggle: () => void;
   onAction: (taskId: string, action: TaskAction, content?: string) => Promise<void>;
+  userMap: Record<string, string>;
 }) {
   const [revisionText, setRevisionText] = useState("");
   const [messageText, setMessageText] = useState("");
@@ -235,6 +250,8 @@ function TaskCard({ task, expanded, onToggle, onAction }: {
   const isOpen = task.status === "active" || task.status === "revision_requested";
   const isActive = task.status === "active";
   const isClosed = task.status === "completed" || task.status === "escalated" || task.status === "cancelled";
+  const assigneeDisplay = (task.assignee_names?.length ? task.assignee_names : [task.assigned_to_name]).join(", ");
+  const next = nextInLabel(isOpen ? task.next_followup_at : null);
 
   useEffect(() => {
     if (expanded && threadRef.current) {
@@ -259,21 +276,21 @@ function TaskCard({ task, expanded, onToggle, onAction }: {
   const followupsLeft = task.max_followups - task.followup_count;
 
   return (
-    <div className={`rounded-2xl border transition-all duration-200 bg-slate-900/50 backdrop-blur-xl ${
+    <div className={`rounded-2xl border transition-all duration-200 ${GLASS} ${
       isPendingReview
-        ? "border-amber-500/40 shadow-lg shadow-amber-500/10 ring-1 ring-amber-500/20"
-        : "border-slate-700/40 hover:border-slate-600/60 hover:shadow-lg hover:shadow-blue-900/20"
+        ? "border-amber-400/40 shadow-lg shadow-amber-500/10 ring-1 ring-amber-400/20"
+        : `${GLASS_HOVER} hover:shadow-lg hover:shadow-black/20`
     }`}>
       {confirm === "cancel" && (
-        <ConfirmDialog title="Cancel this task?" body={`${task.assigned_to_name} will be notified in Slack that the task is cancelled, and all follow-ups will stop.`} confirmLabel="Yes, cancel task" danger onConfirm={() => handle("cancel")} onClose={() => setConfirm(null)} />
+        <ConfirmDialog title="Cancel this task?" body={`${assigneeDisplay} will be notified in Slack that the task is cancelled, and all follow-ups will stop.`} confirmLabel="Yes, cancel task" danger onConfirm={() => handle("cancel")} onClose={() => setConfirm(null)} />
       )}
       {confirm === "reopen" && (
-        <ConfirmDialog title="Reopen this task?" body={`${task.assigned_to_name} will be notified in Slack that the task is active again, and the follow-up schedule will restart.`} confirmLabel="Yes, reopen task" onConfirm={() => handle("reopen")} onClose={() => setConfirm(null)} />
+        <ConfirmDialog title="Reopen this task?" body={`${assigneeDisplay} will be notified in Slack that the task is active again, and the follow-up schedule will restart.`} confirmLabel="Yes, reopen task" onConfirm={() => handle("reopen")} onClose={() => setConfirm(null)} />
       )}
       {confirm === "followup_now" && (
         <ConfirmDialog
           title="Send a follow-up right now?"
-          body={followupsLeft > 0 ? `This sends follow-up #${task.followup_count + 1} of ${task.max_followups} to ${task.assigned_to_name} immediately.` : `All ${task.max_followups} follow-ups are used. Sending now will ESCALATE the task and DM Brandon.`}
+          body={followupsLeft > 0 ? `This sends follow-up #${task.followup_count + 1} of ${task.max_followups} to ${assigneeDisplay} immediately.` : `All ${task.max_followups} follow-ups are used. Sending now will ESCALATE the task and DM Brandon.`}
           confirmLabel={followupsLeft > 0 ? "Send follow-up" : "Escalate now"}
           danger={followupsLeft <= 0}
           onConfirm={() => handle("followup_now")}
@@ -282,40 +299,38 @@ function TaskCard({ task, expanded, onToggle, onAction }: {
       )}
 
       {/* Card header */}
-      <button onClick={onToggle} className="w-full text-left p-5 flex items-start gap-4 hover:bg-white/[0.02] rounded-2xl transition-colors">
+      <button onClick={onToggle} className="w-full text-left p-5 flex items-start gap-4 rounded-2xl transition-colors">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1.5 flex-wrap">
             <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-0.5 rounded-full border ${cfg.badge}`}>
               <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot} ${isPendingReview ? "animate-pulse" : ""}`} />
               {cfg.label}
             </span>
-            {isPendingReview && <span className="text-xs font-medium text-amber-400">Awaiting your review</span>}
+            {isPendingReview && <span className="text-xs font-medium text-amber-300">Awaiting your review</span>}
           </div>
-          <p className="font-medium text-slate-100 leading-snug">{task.task_text}</p>
-          <p className="text-sm text-slate-500 mt-1">
-            <span className="text-slate-300 font-medium">
-              {(task.assignee_names?.length ? task.assignee_names : [task.assigned_to_name]).join(", ")}
-            </span>
-            <span className="mx-1 text-slate-600">·</span>
+          <p className="font-medium text-white leading-snug">{task.task_text}</p>
+          <p className="text-sm text-white/55 mt-1">
+            <span className="text-white/85 font-medium">{assigneeDisplay}</span>
+            <span className="mx-1 text-white/30">·</span>
             assigned by {task.assigned_by_name}
           </p>
-          <p className="text-xs text-slate-600 mt-0.5">{formatDate(task.created_at)} · {timeAgo(task.created_at)}</p>
+          <p className="text-xs text-white/35 mt-0.5">{formatDate(task.created_at)} · {timeAgo(task.created_at)}</p>
         </div>
 
         <div className="text-right shrink-0 flex flex-col items-end gap-1">
-          <span className="text-xs text-slate-500">{task.followup_count}/{task.max_followups} follow-ups</span>
-          {isOpen && task.next_followup_at && (
-            <span className={`text-xs font-medium ${nextIn(task.next_followup_at) === "overdue" ? "text-rose-400" : "text-blue-400"}`}>
-              Next: {nextIn(task.next_followup_at)}
+          <span className="text-xs text-white/45">{task.followup_count}/{task.max_followups} follow-ups</span>
+          {next && (
+            <span className={`text-xs font-medium ${next.isOverdue ? "text-rose-300" : "text-blue-200"}`}>
+              {next.label}
             </span>
           )}
           {task.status === "completed" && task.completed_at && (
-            <span className="text-xs text-emerald-400">Completed {timeAgo(task.completed_at)}</span>
+            <span className="text-xs text-emerald-300">Completed {timeAgo(task.completed_at)}</span>
           )}
           {task.status === "escalated" && task.escalated_at && (
-            <span className="text-xs text-rose-400">Escalated {timeAgo(task.escalated_at)}</span>
+            <span className="text-xs text-rose-300">Escalated {timeAgo(task.escalated_at)}</span>
           )}
-          <svg className={`w-4 h-4 text-slate-600 mt-1 transition-transform ${expanded ? "rotate-180" : ""}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg className={`w-4 h-4 text-white/35 mt-1 transition-transform ${expanded ? "rotate-180" : ""}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="m6 9 6 6 6-6" />
           </svg>
         </div>
@@ -323,16 +338,16 @@ function TaskCard({ task, expanded, onToggle, onAction }: {
 
       {/* Expanded content */}
       {expanded && (
-        <div className="border-t border-slate-700/40 px-5 pb-5 pt-4 anim-expand">
+        <div className="border-t border-white/15 px-5 pb-5 pt-4 anim-expand">
           {/* Thread history */}
           <div className="mb-4">
-            <p className="text-xs text-slate-600 font-medium uppercase tracking-wide mb-3">Thread Activity</p>
+            <p className="text-xs text-white/40 font-medium uppercase tracking-wide mb-3">Thread Activity</p>
             {sortedComments.length > 0 ? (
-              <div ref={threadRef} className="flex flex-col gap-3 max-h-72 overflow-y-auto pr-1">
-                {sortedComments.map(c => <CommentBubble key={c.id} c={c} />)}
+              <div ref={threadRef} className="flex flex-col gap-3 max-h-72 overflow-y-auto pr-1 hide-scrollbar">
+                {sortedComments.map(c => <CommentBubble key={c.id} c={c} userMap={userMap} />)}
               </div>
             ) : (
-              <p className="text-sm text-slate-600 italic text-center py-4 bg-slate-800/30 rounded-xl border border-slate-700/30">
+              <p className="text-sm text-white/35 italic text-center py-4 bg-white/5 rounded-xl border border-white/10">
                 No thread activity yet — Slack replies and actions will appear here.
               </p>
             )}
@@ -341,60 +356,58 @@ function TaskCard({ task, expanded, onToggle, onAction }: {
           {/* pending_review actions */}
           {isPendingReview && (
             <div className="space-y-3">
-              <div className="flex items-center gap-2 text-sm text-amber-400 font-medium bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-2.5">
+              <div className="flex items-center gap-2 text-sm text-amber-300 font-medium bg-amber-400/10 border border-amber-400/20 rounded-xl px-4 py-2.5">
                 <span>👀</span>
-                <span>{task.assigned_to_name} says this is done. Approve it, or describe what needs revising.</span>
+                <span>{assigneeDisplay} says this is done. Approve it, or describe what needs revising.</span>
               </div>
               <textarea
                 value={revisionText}
                 onChange={e => setRevisionText(e.target.value)}
                 placeholder="Describe what needs to be changed or fixed..."
-                className="w-full bg-slate-800/60 border border-slate-700/60 rounded-xl px-4 py-3 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 resize-none"
+                className={`${INPUT_CLS} resize-none`}
                 rows={3}
               />
               <div className="flex gap-3">
-                <button disabled={!!working} onClick={() => handle("approve")} className="flex-1 inline-flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 hover:shadow-xl hover:shadow-emerald-500/20 hover:-translate-y-0.5 disabled:opacity-50 text-white font-semibold text-sm py-2.5 rounded-xl shadow-lg shadow-emerald-500/15 transition-all active:scale-[0.98]">
+                <button disabled={!!working} onClick={() => handle("approve")} className="flex-1 inline-flex items-center justify-center gap-2 bg-emerald-500/30 hover:bg-emerald-500/50 border border-emerald-400/30 hover:-translate-y-0.5 disabled:opacity-50 text-white font-semibold text-sm py-2.5 rounded-xl transition-all active:scale-[0.98]">
                   <IconCheck /> {working === "approve" ? "Approving..." : "Approve & Close"}
                 </button>
-                <button disabled={!!working || !revisionText.trim()} onClick={() => handle("revision")} className="flex-1 inline-flex items-center justify-center gap-2 bg-orange-600 hover:bg-orange-700 hover:shadow-xl hover:shadow-orange-500/20 hover:-translate-y-0.5 disabled:opacity-50 text-white font-semibold text-sm py-2.5 rounded-xl shadow-lg shadow-orange-500/15 transition-all active:scale-[0.98]">
+                <button disabled={!!working || !revisionText.trim()} onClick={() => handle("revision")} className="flex-1 inline-flex items-center justify-center gap-2 bg-orange-500/30 hover:bg-orange-500/50 border border-orange-400/30 hover:-translate-y-0.5 disabled:opacity-50 text-white font-semibold text-sm py-2.5 rounded-xl transition-all active:scale-[0.98]">
                   <IconEdit /> {working === "revision" ? "Sending..." : "Request Revision"}
                 </button>
               </div>
-              <button disabled={!!working} onClick={() => setConfirm("cancel")} className="w-full inline-flex items-center justify-center gap-2 bg-transparent border border-rose-500/30 hover:bg-rose-500/10 hover:border-rose-500/50 text-rose-400 font-medium text-sm py-2.5 rounded-xl transition-all disabled:opacity-50 active:scale-[0.98]">
+              <button disabled={!!working} onClick={() => setConfirm("cancel")} className="w-full inline-flex items-center justify-center gap-2 bg-rose-500/15 border border-rose-400/25 hover:bg-rose-500/25 text-rose-300 font-medium text-sm py-2.5 rounded-xl transition-all disabled:opacity-50 active:scale-[0.98]">
                 <IconTrash /> Cancel Task
               </button>
             </div>
           )}
 
-          {/* Open task actions (active or revision_requested) */}
+          {/* Open task actions */}
           {isOpen && (
             <div className="space-y-3">
               <div className="flex gap-3">
-                <button disabled={!!working} onClick={() => setConfirm("followup_now")} className="flex-1 inline-flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 hover:shadow-xl hover:shadow-blue-500/25 hover:-translate-y-0.5 disabled:opacity-50 text-white font-semibold text-sm py-2.5 rounded-xl shadow-lg shadow-blue-500/20 transition-all active:scale-[0.98]">
+                <button disabled={!!working} onClick={() => setConfirm("followup_now")} className="flex-1 inline-flex items-center justify-center gap-2 bg-white/20 hover:bg-white/30 border border-white/25 hover:-translate-y-0.5 disabled:opacity-50 text-white font-semibold text-sm py-2.5 rounded-xl transition-all active:scale-[0.98]">
                   <IconBolt /> {working === "followup_now" ? "Sending..." : "Send Follow-up Now"}
                 </button>
-                <button disabled={!!working} onClick={() => setConfirm("cancel")} className="flex-1 inline-flex items-center justify-center gap-2 bg-transparent border border-rose-500/30 hover:bg-rose-500/10 hover:border-rose-500/50 text-rose-400 font-medium text-sm py-2.5 rounded-xl transition-all disabled:opacity-50 active:scale-[0.98]">
+                <button disabled={!!working} onClick={() => setConfirm("cancel")} className="flex-1 inline-flex items-center justify-center gap-2 bg-rose-500/15 border border-rose-400/25 hover:bg-rose-500/25 text-rose-300 font-medium text-sm py-2.5 rounded-xl transition-all disabled:opacity-50 active:scale-[0.98]">
                   <IconTrash /> {working === "cancel" ? "Cancelling..." : "Cancel Task"}
                 </button>
               </div>
 
-              {/* Message box — only for active, not revision_requested */}
               {isActive && (
-                <div className="pt-3 border-t border-slate-700/40">
+                <div className="pt-3 border-t border-white/10">
                   <div className="flex gap-2">
                     <input
                       type="text"
                       value={messageText}
                       onChange={e => setMessageText(e.target.value)}
                       onKeyDown={e => { if (e.key === "Enter" && messageText.trim() && !working) handle("message"); }}
-                      placeholder={`Message ${(task.assignee_names?.length ? task.assignee_names : [task.assigned_to_name]).join(", ")} in the Slack thread...`}
-                      className="flex-1 bg-slate-800/60 border border-slate-700/60 rounded-xl px-4 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40"
+                      placeholder={`Message ${assigneeDisplay} in the Slack thread...`}
+                      className={INPUT_CLS.replace("py-2.5", "py-2")}
                     />
                     <button
                       disabled={!!working || !messageText.trim()}
                       onClick={() => handle("message")}
-                      className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 hover:shadow-lg hover:shadow-blue-500/25 hover:-translate-y-0.5 disabled:opacity-40 text-white font-semibold text-sm px-4 py-2.5 rounded-xl shadow-md shadow-blue-500/15 transition-all active:scale-[0.98]"
-                      title="Send to Slack thread"
+                      className="inline-flex items-center gap-2 bg-white/20 hover:bg-white/30 border border-white/25 hover:-translate-y-0.5 disabled:opacity-40 text-white font-semibold text-sm px-4 py-2 rounded-xl transition-all active:scale-[0.98]"
                     >
                       {working === "message" ? <IconSpinner /> : <IconSend />}
                     </button>
@@ -406,7 +419,7 @@ function TaskCard({ task, expanded, onToggle, onAction }: {
 
           {/* Closed task actions */}
           {isClosed && (
-            <button disabled={!!working} onClick={() => setConfirm("reopen")} className="w-full inline-flex items-center justify-center gap-2 bg-transparent border border-blue-500/30 hover:bg-blue-500/10 hover:border-blue-500/50 text-blue-400 font-medium text-sm py-2.5 rounded-xl transition-all disabled:opacity-50 active:scale-[0.98]">
+            <button disabled={!!working} onClick={() => setConfirm("reopen")} className={`w-full inline-flex items-center justify-center gap-2 ${GLASS} ${GLASS_HOVER} text-white/80 font-medium text-sm py-2.5 rounded-xl transition-all disabled:opacity-50 active:scale-[0.98]`}>
               <IconRefresh spinning={working === "reopen"} /> {working === "reopen" ? "Reopening..." : "Reopen Task"}
             </button>
           )}
@@ -416,21 +429,32 @@ function TaskCard({ task, expanded, onToggle, onAction }: {
   );
 }
 
-// ── Employee view ───────────────────────────────────────────────────────────
+// ── Productivity bar ─────────────────────────────────────────────────────────
 
-function EmployeeView({ tasks, sortBy, expandedId, onToggle, onAction }: {
+function ProdBar({ pct, color }: { pct: number; color: string }) {
+  return (
+    <div className="h-1.5 rounded-full bg-white/15 overflow-hidden">
+      <div className={`h-full rounded-full ${color} transition-all`} style={{ width: `${Math.min(pct, 100)}%` }} />
+    </div>
+  );
+}
+
+// ── Employee view ─────────────────────────────────────────────────────────────
+
+function EmployeeView({ tasks, sortBy, expandedId, onToggle, onAction, userMap }: {
   tasks: TaskWithComments[];
   sortBy: SortBy;
   expandedId: string | null;
   onToggle: (id: string) => void;
   onAction: (taskId: string, action: TaskAction, content?: string) => Promise<void>;
+  userMap: Record<string, string>;
 }) {
   const grouped = groupByEmployee(tasks);
   const employees = Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b));
 
   if (employees.length === 0) {
     return (
-      <div className="text-center text-slate-500 py-16 bg-slate-900/40 rounded-2xl border border-slate-700/30">
+      <div className={`text-center text-white/50 py-16 ${GLASS} rounded-2xl`}>
         No tasks assigned yet.
       </div>
     );
@@ -439,34 +463,77 @@ function EmployeeView({ tasks, sortBy, expandedId, onToggle, onAction }: {
   return (
     <div className="space-y-5">
       {employees.map(([name, empTasks]) => {
+        const total = empTasks.length;
         const active = empTasks.filter(t => t.status === "active").length;
         const pending = empTasks.filter(t => t.status === "pending_review").length;
         const revision = empTasks.filter(t => t.status === "revision_requested").length;
         const done = empTasks.filter(t => t.status === "completed").length;
         const escalated = empTasks.filter(t => t.status === "escalated").length;
+        const cancelled = empTasks.filter(t => t.status === "cancelled").length;
+        const completionRate = total > 0 ? Math.round((done / total) * 100) : 0;
+        const completedTasks = empTasks.filter(t => t.status === "completed");
+        const avgFollowups = completedTasks.length > 0
+          ? (completedTasks.reduce((s, t) => s + t.followup_count, 0) / completedTasks.length).toFixed(1)
+          : "—";
+        const openTasks = active + pending + revision;
+
         return (
-          <div key={name} className="rounded-2xl border border-slate-700/40 bg-slate-900/40 overflow-hidden">
-            <div className="px-5 py-4 border-b border-slate-700/40 flex items-center justify-between flex-wrap gap-3">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center font-bold text-white text-sm shadow-lg shadow-blue-500/25">
-                  {name.charAt(0).toUpperCase()}
+          <div key={name} className={`rounded-2xl border ${GLASS} overflow-hidden`}>
+            {/* Employee header */}
+            <div className="px-5 py-4 border-b border-white/15">
+              <div className="flex items-start justify-between gap-4 flex-wrap">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-white/20 border border-white/30 flex items-center justify-center font-bold text-white text-base shadow-lg">
+                    {name.charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-white text-base">{name}</h3>
+                    <p className="text-xs text-white/50">{total} task{total !== 1 ? "s" : ""} total</p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-semibold text-slate-100">{name}</h3>
-                  <p className="text-xs text-slate-500">{empTasks.length} task{empTasks.length !== 1 ? "s" : ""} total</p>
+
+                {/* Status pill row */}
+                <div className="flex gap-2 text-xs flex-wrap">
+                  {active > 0    && <span className="px-2.5 py-1 rounded-full bg-blue-400/20 text-blue-200 border border-blue-400/25">{active} active</span>}
+                  {pending > 0   && <span className="px-2.5 py-1 rounded-full bg-amber-400/20 text-amber-200 border border-amber-400/25">{pending} review</span>}
+                  {revision > 0  && <span className="px-2.5 py-1 rounded-full bg-orange-400/20 text-orange-200 border border-orange-400/25">{revision} revision</span>}
+                  {done > 0      && <span className="px-2.5 py-1 rounded-full bg-emerald-400/20 text-emerald-200 border border-emerald-400/25">{done} done</span>}
+                  {escalated > 0 && <span className="px-2.5 py-1 rounded-full bg-rose-400/20 text-rose-200 border border-rose-400/25">{escalated} escalated</span>}
+                  {cancelled > 0 && <span className="px-2.5 py-1 rounded-full bg-white/10 text-white/50 border border-white/15">{cancelled} cancelled</span>}
                 </div>
               </div>
-              <div className="flex gap-3 text-xs flex-wrap">
-                {active > 0    && <span className="px-2 py-1 rounded-full bg-blue-500/15 text-blue-300 border border-blue-500/20">{active} active</span>}
-                {pending > 0   && <span className="px-2 py-1 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/20">{pending} review</span>}
-                {revision > 0  && <span className="px-2 py-1 rounded-full bg-orange-500/15 text-orange-300 border border-orange-500/20">{revision} revision</span>}
-                {done > 0      && <span className="px-2 py-1 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/20">{done} done</span>}
-                {escalated > 0 && <span className="px-2 py-1 rounded-full bg-rose-500/15 text-rose-300 border border-rose-500/20">{escalated} escalated</span>}
+
+              {/* Productivity metrics */}
+              <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="bg-white/[0.08] rounded-xl px-3 py-2.5 border border-white/10">
+                  <p className="text-white/40 text-xs mb-0.5">Completion Rate</p>
+                  <p className="text-white font-bold text-lg leading-none">{completionRate}%</p>
+                  <div className="mt-2">
+                    <ProdBar pct={completionRate} color={completionRate >= 75 ? "bg-emerald-400" : completionRate >= 40 ? "bg-amber-400" : "bg-rose-400"} />
+                  </div>
+                </div>
+                <div className="bg-white/[0.08] rounded-xl px-3 py-2.5 border border-white/10">
+                  <p className="text-white/40 text-xs mb-0.5">Open Tasks</p>
+                  <p className="text-white font-bold text-lg leading-none">{openTasks}</p>
+                  <p className="text-white/35 text-xs mt-1">of {total} total</p>
+                </div>
+                <div className="bg-white/[0.08] rounded-xl px-3 py-2.5 border border-white/10">
+                  <p className="text-white/40 text-xs mb-0.5">Avg Follow-ups</p>
+                  <p className="text-white font-bold text-lg leading-none">{avgFollowups}</p>
+                  <p className="text-white/35 text-xs mt-1">per completed task</p>
+                </div>
+                <div className="bg-white/[0.08] rounded-xl px-3 py-2.5 border border-white/10">
+                  <p className="text-white/40 text-xs mb-0.5">Completed</p>
+                  <p className="text-white font-bold text-lg leading-none">{done}</p>
+                  <p className="text-white/35 text-xs mt-1">{escalated > 0 ? `${escalated} escalated` : "no escalations"}</p>
+                </div>
               </div>
             </div>
+
+            {/* Task list */}
             <div className="p-4 space-y-2">
               {applySort(empTasks, sortBy).map(task => (
-                <TaskCard key={task.id} task={task} expanded={expandedId === task.id} onToggle={() => onToggle(task.id)} onAction={onAction} />
+                <TaskCard key={task.id} task={task} expanded={expandedId === task.id} onToggle={() => onToggle(task.id)} onAction={onAction} userMap={userMap} />
               ))}
             </div>
           </div>
@@ -478,72 +545,46 @@ function EmployeeView({ tasks, sortBy, expandedId, onToggle, onAction }: {
 
 // ── New Task Modal ──────────────────────────────────────────────────────────
 
-const INPUT_CLS = "w-full bg-slate-800/60 border border-slate-700/60 rounded-xl px-4 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40";
-
-function NewTaskModal({ onClose, onCreated, toast }: {
+function NewTaskModal({ onClose, onCreated, toast, initialUsers }: {
   onClose: () => void; onCreated: () => void; toast: (msg: string, ok: boolean) => void;
+  initialUsers: SlackUser[];
 }) {
-  const [users, setUsers] = useState<SlackUser[]>([]);
-  const [loadingUsers, setLoadingUsers] = useState(true);
+  const [users] = useState<SlackUser[]>(initialUsers);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [taskText, setTaskText] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [userSearch, setUserSearch] = useState("");
-
-  // Follow-up schedule: array of datetime-local strings
   const [followups, setFollowups] = useState<string[]>([""]);
-  // Due date: "open" | "custom"
   const [dueDateMode, setDueDateMode] = useState<"open" | "custom">("open");
   const [dueDateVal, setDueDateVal] = useState("");
-
-  useEffect(() => {
-    fetch("/api/slack/users", { cache: "no-store" })
-      .then(r => r.json()).then(d => setUsers(d.members ?? [])).catch(() => setUsers([])).finally(() => setLoadingUsers(false));
-  }, []);
 
   const filteredUsers = userSearch
     ? users.filter(u => u.name.toLowerCase().includes(userSearch.toLowerCase()))
     : users;
 
   function toggleUser(u: SlackUser) {
-    setSelectedIds(prev =>
-      prev.includes(u.id) ? prev.filter(id => id !== u.id) : [...prev, u.id]
-    );
+    setSelectedIds(prev => prev.includes(u.id) ? prev.filter(id => id !== u.id) : [...prev, u.id]);
   }
-
   function addFollowup() { setFollowups(prev => [...prev, ""]); }
   function removeFollowup(i: number) { setFollowups(prev => prev.filter((_, idx) => idx !== i)); }
   function setFollowupAt(i: number, val: string) { setFollowups(prev => { const n = [...prev]; n[i] = val; return n; }); }
 
   const dueMs = dueDateMode === "custom" && dueDateVal ? new Date(dueDateVal).getTime() : null;
-  const followupWarnings = followups.map(f => {
-    if (!f || !dueMs) return false;
-    return new Date(f).getTime() > dueMs;
-  });
+  const followupWarnings = followups.map(f => !f || !dueMs ? false : new Date(f).getTime() > dueMs);
   const hasWarning = followupWarnings.some(Boolean);
   const filledFollowups = followups.filter(f => f.trim());
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!selectedIds.length || !taskText.trim() || hasWarning) return;
-    if (filledFollowups.length === 0) return;
-
+    if (!selectedIds.length || !taskText.trim() || hasWarning || filledFollowups.length === 0) return;
     const selectedUsers = selectedIds.map(id => users.find(u => u.id === id)!).filter(Boolean);
     const followupSchedule = filledFollowups.map(f => new Date(f).toISOString());
     const dueDate = dueDateMode === "custom" && dueDateVal ? new Date(dueDateVal).toISOString() : null;
-
     setSubmitting(true);
     try {
       const res = await fetch("/api/tasks", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          assigneeIds: selectedUsers.map(u => u.id),
-          assigneeNames: selectedUsers.map(u => u.name),
-          taskText,
-          followupSchedule,
-          dueDate,
-        }),
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ assigneeIds: selectedUsers.map(u => u.id), assigneeNames: selectedUsers.map(u => u.name), taskText, followupSchedule, dueDate }),
       });
       if (res.ok) { toast("Task created and posted to Slack", true); onCreated(); onClose(); }
       else { const d = await res.json(); toast(d.error ?? "Failed to create task", false); }
@@ -552,151 +593,113 @@ function NewTaskModal({ onClose, onCreated, toast }: {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-40 flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-slate-900/95 backdrop-blur-xl border border-slate-700/60 rounded-3xl w-full max-w-lg shadow-2xl shadow-black/60 anim-pop my-4">
-        <div className="flex items-center justify-between p-6 border-b border-slate-700/40">
-          <h2 className="text-lg font-semibold text-slate-100">Assign New Task</h2>
-          <button onClick={onClose} className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 flex items-center justify-center transition-all hover:rotate-90 duration-200">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 flex items-start justify-center p-4 overflow-y-auto">
+      <div className={`${GLASS} rounded-3xl w-full max-w-lg shadow-2xl anim-pop my-4`}>
+        <div className="flex items-center justify-between p-6 border-b border-white/15">
+          <h2 className="text-lg font-semibold text-white">Assign New Task</h2>
+          <button onClick={onClose} className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white/70 flex items-center justify-center transition-all hover:rotate-90 duration-200">
             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
           </button>
         </div>
-
         <form onSubmit={submit} className="p-6 space-y-5">
           {/* Assignees */}
           <div>
-            <label className="block text-sm font-medium text-slate-400 mb-2">
-              Assign to <span className="text-slate-600">(select one or more)</span>
-            </label>
-            {loadingUsers ? (
-              <div className="text-sm text-slate-500 py-2">Loading team members...</div>
-            ) : (
-              <div className="space-y-2">
-                <input
-                  type="text"
-                  placeholder="Search team members..."
-                  value={userSearch}
-                  onChange={e => setUserSearch(e.target.value)}
-                  className={INPUT_CLS}
-                />
-                {/* Selected chips */}
-                {selectedIds.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
-                    {selectedIds.map(id => {
-                      const u = users.find(u => u.id === id);
-                      if (!u) return null;
-                      return (
-                        <span key={id} className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/15 border border-blue-500/30 text-blue-300 text-xs font-medium">
-                          {u.name}
-                          <button type="button" onClick={() => toggleUser(u)} className="text-blue-400 hover:text-white transition-colors">
-                            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
-                          </button>
-                        </span>
-                      );
-                    })}
-                  </div>
-                )}
-                <div className="max-h-36 overflow-y-auto bg-slate-800/60 border border-slate-700/60 rounded-xl divide-y divide-slate-700/40">
-                  {filteredUsers.length === 0 && <p className="text-sm text-slate-500 p-3 text-center">No members found</p>}
-                  {filteredUsers.map(u => {
-                    const sel = selectedIds.includes(u.id);
+            <label className="block text-sm font-medium text-white/70 mb-2">Assign to <span className="text-white/35">(select one or more)</span></label>
+            <div className="space-y-2">
+              <input type="text" placeholder="Search team members..." value={userSearch} onChange={e => setUserSearch(e.target.value)} className={INPUT_CLS} />
+              {selectedIds.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {selectedIds.map(id => {
+                    const u = users.find(u => u.id === id);
+                    if (!u) return null;
                     return (
-                      <button key={u.id} type="button" onClick={() => toggleUser(u)}
-                        className={`w-full text-left px-4 py-2.5 text-sm flex items-center justify-between transition-colors ${sel ? "bg-blue-500/10 text-slate-200" : "text-slate-400 hover:bg-blue-500/10 hover:text-slate-200"}`}
-                      >
+                      <span key={id} className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/20 border border-white/25 text-white text-xs font-medium">
                         {u.name}
-                        {sel && <svg className="w-4 h-4 text-blue-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>}
-                      </button>
+                        <button type="button" onClick={() => toggleUser(u)} className="text-white/60 hover:text-white transition-colors">
+                          <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+                        </button>
+                      </span>
                     );
                   })}
                 </div>
+              )}
+              <div className="max-h-36 overflow-y-auto bg-white/5 border border-white/15 rounded-xl divide-y divide-white/10 hide-scrollbar">
+                {filteredUsers.length === 0 && <p className="text-sm text-white/40 p-3 text-center">No members found</p>}
+                {filteredUsers.map(u => {
+                  const sel = selectedIds.includes(u.id);
+                  return (
+                    <button key={u.id} type="button" onClick={() => toggleUser(u)}
+                      className={`w-full text-left px-4 py-2.5 text-sm flex items-center justify-between transition-colors ${sel ? "bg-white/15 text-white" : "text-white/65 hover:bg-white/10 hover:text-white"}`}
+                    >
+                      {u.name}
+                      {sel && <svg className="w-4 h-4 text-white shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>}
+                    </button>
+                  );
+                })}
               </div>
-            )}
+            </div>
           </div>
 
           {/* Task description */}
           <div>
-            <label className="block text-sm font-medium text-slate-400 mb-2">Task description</label>
-            <textarea
-              required
-              value={taskText}
-              onChange={e => setTaskText(e.target.value)}
+            <label className="block text-sm font-medium text-white/70 mb-2">Task description</label>
+            <textarea required value={taskText} onChange={e => setTaskText(e.target.value)}
               placeholder="e.g. Prepare the supplier outreach plan by Friday"
-              className="w-full bg-slate-800/60 border border-slate-700/60 rounded-xl px-4 py-3 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 resize-none"
-              rows={3}
-            />
+              className={`${INPUT_CLS} resize-none`} rows={3} />
           </div>
 
           {/* Due date */}
           <div>
-            <label className="block text-sm font-medium text-slate-400 mb-2">Due date</label>
+            <label className="block text-sm font-medium text-white/70 mb-2">Due date</label>
             <div className="flex gap-2 mb-2">
               {(["open", "custom"] as const).map(m => (
                 <button key={m} type="button" onClick={() => setDueDateMode(m)}
-                  className={`px-4 py-1.5 rounded-lg text-sm font-medium border transition-all ${dueDateMode === m ? "bg-blue-600/20 border-blue-500/40 text-blue-300" : "bg-slate-800/60 border-slate-700/40 text-slate-500 hover:text-slate-300"}`}
+                  className={`px-4 py-1.5 rounded-lg text-sm font-medium border transition-all ${dueDateMode === m ? "bg-white/25 border-white/35 text-white" : "bg-white/5 border-white/15 text-white/55 hover:text-white/80"}`}
                 >
                   {m === "open" ? "Open (no due date)" : "Custom date"}
                 </button>
               ))}
             </div>
             {dueDateMode === "custom" && (
-              <input
-                type="datetime-local"
-                value={dueDateVal}
-                onChange={e => setDueDateVal(e.target.value)}
-                className={INPUT_CLS}
-              />
+              <input type="datetime-local" value={dueDateVal} onChange={e => setDueDateVal(e.target.value)} className={INPUT_CLS} />
             )}
           </div>
 
           {/* Follow-up schedule */}
           <div>
-            <label className="block text-sm font-medium text-slate-400 mb-2">Follow-up schedule</label>
+            <label className="block text-sm font-medium text-white/70 mb-2">Follow-up schedule</label>
             <div className="space-y-2">
               {followups.map((f, i) => (
-                <div key={i} className="flex gap-2 items-center">
+                <div key={i} className="flex gap-2 items-end">
                   <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xs text-slate-500">
-                        {i === 0 ? "1st Follow-up" : i === 1 ? "2nd Follow-up" : i === 2 ? "3rd Follow-up" : `${i + 1}th Follow-up`}
-                      </span>
-                      {followupWarnings[i] && (
-                        <span className="text-xs text-rose-400">⚠ After due date</span>
-                      )}
-                    </div>
-                    <input
-                      type="datetime-local"
-                      value={f}
-                      onChange={e => setFollowupAt(i, e.target.value)}
-                      className={`${INPUT_CLS} ${followupWarnings[i] ? "border-rose-500/50 focus:ring-rose-500/30" : ""}`}
-                    />
+                    <p className="text-xs text-white/40 mb-1">
+                      {i === 0 ? "1st" : i === 1 ? "2nd" : i === 2 ? "3rd" : `${i + 1}th`} Follow-up
+                      {followupWarnings[i] && <span className="text-rose-300 ml-2">⚠ After due date</span>}
+                    </p>
+                    <input type="datetime-local" value={f} onChange={e => setFollowupAt(i, e.target.value)}
+                      className={`${INPUT_CLS} ${followupWarnings[i] ? "border-rose-400/50" : ""}`} />
                   </div>
                   {followups.length > 1 && (
                     <button type="button" onClick={() => removeFollowup(i)}
-                      className="mt-5 w-8 h-8 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:bg-rose-500/20 flex items-center justify-center transition-all shrink-0"
-                    >
+                      className="w-9 h-9 rounded-lg bg-rose-500/15 border border-rose-400/20 text-rose-300 hover:bg-rose-500/25 flex items-center justify-center transition-all shrink-0">
                       <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
                     </button>
                   )}
                 </div>
               ))}
               <button type="button" onClick={addFollowup}
-                className="inline-flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 bg-blue-500/10 border border-blue-500/20 hover:border-blue-500/40 px-3 py-1.5 rounded-lg transition-all"
-              >
+                className="inline-flex items-center gap-1.5 text-xs text-white/65 hover:text-white bg-white/8 border border-white/15 hover:border-white/25 px-3 py-1.5 rounded-lg transition-all">
                 <IconPlus /> Add follow-up
               </button>
             </div>
           </div>
 
-          {/* Actions */}
           <div className="flex gap-3 pt-1">
-            <button type="button" onClick={onClose} className="flex-1 bg-slate-800 border border-slate-700 hover:bg-slate-700 text-slate-300 font-medium text-sm py-3 rounded-xl transition-all active:scale-[0.98]">
+            <button type="button" onClick={onClose} className={`flex-1 ${GLASS} ${GLASS_HOVER} text-white/80 font-medium text-sm py-3 rounded-xl transition-all active:scale-[0.98]`}>
               Cancel
             </button>
-            <button
-              type="submit"
-              disabled={!selectedIds.length || !taskText.trim() || filledFollowups.length === 0 || hasWarning || submitting}
-              className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 hover:shadow-xl hover:shadow-blue-500/25 hover:-translate-y-0.5 disabled:opacity-50 text-white font-semibold text-sm py-3 rounded-xl shadow-lg shadow-blue-500/20 transition-all active:scale-[0.98]"
-            >
+            <button type="submit" disabled={!selectedIds.length || !taskText.trim() || filledFollowups.length === 0 || hasWarning || submitting}
+              className="flex-1 bg-white/20 hover:bg-white/30 border border-white/30 hover:border-white/45 hover:-translate-y-0.5 disabled:opacity-50 text-white font-semibold text-sm py-3 rounded-xl transition-all active:scale-[0.98]">
               {submitting ? "Posting to Slack..." : "Assign Task"}
             </button>
           </div>
@@ -722,7 +725,23 @@ export default function DashboardClient({ initialTasks, userEmail }: {
   const [refreshing, setRefreshing] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [toasts, setToasts] = useState<ToastType[]>([]);
+  const [users, setUsers] = useState<SlackUser[]>([]);
+  const [userMap, setUserMap] = useState<Record<string, string>>({});
   const toastIdRef = useRef(0);
+
+  // Load users for mention resolution and modal
+  useEffect(() => {
+    fetch("/api/slack/users", { cache: "no-store" })
+      .then(r => r.json())
+      .then(d => {
+        const members: SlackUser[] = d.members ?? [];
+        setUsers(members);
+        const map: Record<string, string> = {};
+        for (const u of members) map[u.id] = u.name;
+        setUserMap(map);
+      })
+      .catch(() => {});
+  }, []);
 
   const addToast = useCallback((message: string, ok: boolean) => {
     const id = ++toastIdRef.current;
@@ -802,40 +821,45 @@ export default function DashboardClient({ initialTasks, userEmail }: {
   const visible = applySort(filteredTasks, sortBy);
 
   return (
-    <main className="min-h-screen relative bg-[#050e24] text-slate-100 overflow-x-hidden">
-      {/* Dot grid background */}
-      <div className="pointer-events-none fixed inset-0 dot-grid opacity-100" />
-
-      {/* Glow orbs */}
-      <div className="pointer-events-none fixed -top-40 -left-40 w-[700px] h-[500px] rounded-full bg-blue-600/15 blur-[140px] anim-glow" />
-      <div className="pointer-events-none fixed -bottom-60 -right-40 w-[600px] h-[600px] rounded-full bg-blue-800/15 blur-[120px] anim-glow" style={{ animationDelay: "2s" }} />
-      <div className="pointer-events-none fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] rounded-full bg-indigo-900/10 blur-[100px]" />
-
+    <main className="min-h-screen text-white overflow-x-hidden" style={{ background: GRADIENT_BG }}>
       <Toast toasts={toasts} />
-      {newTaskOpen && <NewTaskModal onClose={() => setNewTaskOpen(false)} onCreated={() => refresh({ silent: true })} toast={addToast} />}
+      {newTaskOpen && (
+        <NewTaskModal
+          onClose={() => setNewTaskOpen(false)}
+          onCreated={() => refresh({ silent: true })}
+          toast={addToast}
+          initialUsers={users}
+        />
+      )}
 
       <div className="relative max-w-4xl mx-auto px-4 py-8">
         {/* Header */}
         <div className="flex items-center justify-between mb-8 gap-3 flex-wrap">
-          <div className="flex items-center gap-3">
-            <AppLogo size="md" />
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent">Task Tracker</h1>
-              <p className="text-slate-500 text-xs">
-                Updated {timeAgo(lastRefresh.toISOString())}
-                {userEmail && <span className="hidden sm:inline"> · {userEmail}</span>}
-              </p>
-            </div>
+          <div>
+            <h1 className="text-4xl font-black tracking-tight leading-none">
+              Task{" "}
+              <span style={{ background: "linear-gradient(90deg, #bfdbfe, #ffffff, #93c5fd)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
+                Tracker
+              </span>
+            </h1>
+            <p className="text-white/45 text-xs mt-1">
+              Updated {timeAgo(lastRefresh.toISOString())}
+              {userEmail && <span className="hidden sm:inline"> · {userEmail}</span>}
+            </p>
           </div>
-          <div className="flex items-center gap-2">
-            <button onClick={() => refresh()} disabled={refreshing} className="inline-flex items-center gap-2 bg-slate-800/80 border border-slate-700/60 hover:bg-slate-700/80 hover:border-slate-600 text-slate-400 hover:text-slate-200 font-medium text-sm px-4 py-2.5 rounded-xl shadow-sm transition-all disabled:opacity-60 active:scale-[0.98]">
+          <div className="flex items-center gap-2 flex-wrap">
+            <button onClick={() => refresh()} disabled={refreshing} className={`inline-flex items-center gap-2 ${GLASS} ${GLASS_HOVER} text-white/70 hover:text-white font-medium text-sm px-4 py-2.5 rounded-xl transition-all disabled:opacity-60 active:scale-[0.98]`}>
               <IconRefresh spinning={refreshing} />
               <span className="hidden sm:inline">{refreshing ? "Refreshing..." : "Refresh"}</span>
             </button>
-            <button onClick={() => setNewTaskOpen(true)} className="inline-flex items-center gap-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 hover:shadow-xl hover:shadow-blue-500/30 hover:-translate-y-0.5 text-white font-semibold text-sm px-5 py-2.5 rounded-xl shadow-lg shadow-blue-500/20 transition-all active:scale-[0.98]">
+            <button onClick={() => { setFilter("by_employee"); }} className={`inline-flex items-center gap-2 ${GLASS} ${GLASS_HOVER} text-white/70 hover:text-white font-medium text-sm px-4 py-2.5 rounded-xl transition-all active:scale-[0.98] ${filter === "by_employee" ? "bg-white/20 border-white/35 text-white" : ""}`}>
+              <IconBarChart />
+              <span className="hidden sm:inline">By Employee</span>
+            </button>
+            <button onClick={() => setNewTaskOpen(true)} className="inline-flex items-center gap-2 bg-white/25 hover:bg-white/35 border border-white/35 hover:border-white/50 hover:-translate-y-0.5 text-white font-semibold text-sm px-5 py-2.5 rounded-xl shadow-lg transition-all active:scale-[0.98]">
               <IconPlus /> New Task
             </button>
-            <button onClick={signOut} disabled={signingOut} className="inline-flex items-center gap-2 bg-slate-800/80 border border-slate-700/60 hover:bg-slate-700/80 hover:text-rose-400 text-slate-400 font-medium text-sm px-3.5 py-2.5 rounded-xl shadow-sm transition-all disabled:opacity-60 active:scale-[0.98]">
+            <button onClick={signOut} disabled={signingOut} className={`inline-flex items-center gap-2 ${GLASS} ${GLASS_HOVER} text-white/65 hover:text-rose-300 font-medium text-sm px-3.5 py-2.5 rounded-xl transition-all disabled:opacity-60 active:scale-[0.98]`}>
               {signingOut ? <IconSpinner /> : <IconLogout />}
               <span className="hidden sm:inline">{signingOut ? "Signing out..." : "Sign out"}</span>
             </button>
@@ -845,40 +869,40 @@ export default function DashboardClient({ initialTasks, userEmail }: {
         {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
           {[
-            { label: "Active",       count: counts.active,             color: "text-blue-400",    glow: "shadow-blue-500/10",    border: "border-blue-500/20" },
-            { label: "Needs Review", count: counts.pending_review,     color: "text-amber-400",   glow: "shadow-amber-500/10",   border: "border-amber-500/20" },
-            { label: "Revision",     count: counts.revision_requested, color: "text-orange-400",  glow: "shadow-orange-500/10",  border: "border-orange-500/20" },
-            { label: "Done",         count: counts.completed,          color: "text-emerald-400", glow: "shadow-emerald-500/10", border: "border-emerald-500/20" },
-            { label: "Escalated",    count: counts.escalated,          color: "text-rose-400",    glow: "shadow-rose-500/10",    border: "border-rose-500/20" },
+            { label: "Active",       count: counts.active,             color: "text-blue-200",    border: "border-blue-400/25" },
+            { label: "Needs Review", count: counts.pending_review,     color: "text-amber-200",   border: "border-amber-400/25" },
+            { label: "Revision",     count: counts.revision_requested, color: "text-orange-200",  border: "border-orange-400/25" },
+            { label: "Done",         count: counts.completed,          color: "text-emerald-200", border: "border-emerald-400/25" },
+            { label: "Escalated",    count: counts.escalated,          color: "text-rose-200",    border: "border-rose-400/25" },
           ].map((s, i) => (
-            <div key={s.label} className={`bg-slate-900/60 backdrop-blur-xl rounded-2xl p-4 border ${s.border} shadow-lg ${s.glow} text-center anim-rise hover:-translate-y-0.5 hover:shadow-xl transition-all duration-200`} style={{ animationDelay: `${i * 60}ms` }}>
-              <p className="text-slate-500 text-xs mb-1">{s.label}</p>
+            <div key={s.label} className={`${GLASS} rounded-2xl p-4 border ${s.border} text-center anim-rise hover:-translate-y-0.5 hover:bg-white/[0.18] transition-all duration-200`} style={{ animationDelay: `${i * 60}ms` }}>
+              <p className="text-white/40 text-xs mb-1">{s.label}</p>
               <p className={`text-2xl font-bold ${s.color}`}>{s.count}</p>
             </div>
           ))}
         </div>
 
-        {/* Filter tabs */}
-        <div className="flex gap-1.5 mb-4 overflow-x-auto pb-1">
+        {/* Filter tabs — no scrollbar */}
+        <div className="flex gap-1.5 mb-4 overflow-x-auto hide-scrollbar flex-wrap">
           {FILTERS.map(f => (
             <button
               key={f.key}
               onClick={() => { setFilter(f.key); if (f.key === "all") setSortBy("status"); }}
-              className={`shrink-0 px-4 py-2 rounded-xl text-sm font-medium transition-all flex items-center gap-1.5 ${
+              className={`shrink-0 px-3.5 py-1.5 rounded-xl text-sm font-medium transition-all flex items-center gap-1.5 ${
                 filter === f.key
-                  ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg shadow-blue-500/25"
-                  : "bg-slate-800/60 border border-slate-700/40 text-slate-400 hover:text-slate-200 hover:bg-slate-700/60 hover:border-slate-600/60"
+                  ? "bg-white/30 border border-white/40 text-white shadow-lg"
+                  : "bg-white/[0.08] border border-white/15 text-white/60 hover:text-white hover:bg-white/15 hover:border-white/25"
               }`}
             >
               {f.key === "by_employee" ? <IconUser /> : null}
               {f.label}
               {f.key !== "by_employee" && counts[f.key] > 0 && (
-                <span className={`text-xs px-1.5 py-0.5 rounded-full ${filter === f.key ? "bg-white/20 text-white" : "bg-slate-700 text-slate-400"}`}>
+                <span className={`text-xs px-1.5 py-0.5 rounded-full ${filter === f.key ? "bg-white/25 text-white" : "bg-white/10 text-white/55"}`}>
                   {counts[f.key]}
                 </span>
               )}
               {f.key === "pending_review" && counts.pending_review > 0 && (
-                <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                <span className="w-2 h-2 rounded-full bg-amber-300 animate-pulse" />
               )}
             </button>
           ))}
@@ -887,16 +911,16 @@ export default function DashboardClient({ initialTasks, userEmail }: {
         {/* Sort controls */}
         {filter !== "by_employee" && (
           <div className="flex items-center gap-2 mb-5">
-            <span className="text-xs text-slate-600 shrink-0">Sort:</span>
+            <span className="text-xs text-white/35 shrink-0">Sort:</span>
             {filter === "all" && (
-              <button onClick={() => setSortBy("status")} className={`text-xs px-3 py-1.5 rounded-lg border transition-all ${sortBy === "status" ? "bg-blue-600/20 border-blue-500/40 text-blue-300" : "bg-slate-800/60 border-slate-700/40 text-slate-500 hover:text-slate-300"}`}>
+              <button onClick={() => setSortBy("status")} className={`text-xs px-3 py-1.5 rounded-lg border transition-all ${sortBy === "status" ? "bg-white/20 border-white/30 text-white" : "bg-white/5 border-white/15 text-white/45 hover:text-white/75"}`}>
                 By Status
               </button>
             )}
-            <button onClick={() => setSortBy("date_desc")} className={`text-xs px-3 py-1.5 rounded-lg border transition-all ${sortBy === "date_desc" ? "bg-blue-600/20 border-blue-500/40 text-blue-300" : "bg-slate-800/60 border-slate-700/40 text-slate-500 hover:text-slate-300"}`}>
+            <button onClick={() => setSortBy("date_desc")} className={`text-xs px-3 py-1.5 rounded-lg border transition-all ${sortBy === "date_desc" ? "bg-white/20 border-white/30 text-white" : "bg-white/5 border-white/15 text-white/45 hover:text-white/75"}`}>
               Newest First
             </button>
-            <button onClick={() => setSortBy("date_asc")} className={`text-xs px-3 py-1.5 rounded-lg border transition-all ${sortBy === "date_asc" ? "bg-blue-600/20 border-blue-500/40 text-blue-300" : "bg-slate-800/60 border-slate-700/40 text-slate-500 hover:text-slate-300"}`}>
+            <button onClick={() => setSortBy("date_asc")} className={`text-xs px-3 py-1.5 rounded-lg border transition-all ${sortBy === "date_asc" ? "bg-white/20 border-white/30 text-white" : "bg-white/5 border-white/15 text-white/45 hover:text-white/75"}`}>
               Oldest First
             </button>
           </div>
@@ -904,17 +928,17 @@ export default function DashboardClient({ initialTasks, userEmail }: {
 
         {/* Task list or employee view */}
         {filter === "by_employee" ? (
-          <EmployeeView tasks={tasks} sortBy={sortBy} expandedId={expandedId} onToggle={id => setExpandedId(expandedId === id ? null : id)} onAction={handleAction} />
+          <EmployeeView tasks={tasks} sortBy={sortBy} expandedId={expandedId} onToggle={id => setExpandedId(expandedId === id ? null : id)} onAction={handleAction} userMap={userMap} />
         ) : (
           <div className="space-y-3">
             {visible.length === 0 && (
-              <div className="text-center text-slate-500 py-16 bg-slate-900/40 backdrop-blur-xl rounded-2xl border border-slate-700/30">
+              <div className={`text-center text-white/45 py-16 ${GLASS} rounded-2xl`}>
                 {filter === "all" ? "No tasks yet. Create one above!" : `No ${filter.replace(/_/g, " ")} tasks.`}
               </div>
             )}
             {visible.map((task, i) => (
               <div key={task.id} className="anim-rise" style={{ animationDelay: `${Math.min(i, 8) * 50}ms` }}>
-                <TaskCard task={task} expanded={expandedId === task.id} onToggle={() => setExpandedId(expandedId === task.id ? null : task.id)} onAction={handleAction} />
+                <TaskCard task={task} expanded={expandedId === task.id} onToggle={() => setExpandedId(expandedId === task.id ? null : task.id)} onAction={handleAction} userMap={userMap} />
               </div>
             ))}
           </div>
