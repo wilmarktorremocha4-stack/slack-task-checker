@@ -56,8 +56,8 @@ export async function generateFollowupMessage(options: {
   followupNumber: number;
   urgency: ReturnType<typeof getFollowupUrgency>;
 }): Promise<string> {
-  const { taskText, assigneeName, assignerName, followupNumber, urgency } =
-    options;
+  // followupNumber drives the tone via `urgency` but is never shown to the assignee
+  const { taskText, assigneeName, assignerName, urgency } = options;
 
   const toneGuide = {
     gentle:
@@ -82,7 +82,7 @@ Tone: ${toneGuide[urgency]}
 Rules:
 - Address ${assigneeName} directly (use their name)
 - Reference the specific task: "${taskText}"
-- This is follow-up number ${followupNumber} of 5
+- NEVER mention follow-up numbers or counts (no "follow-up 1 of 5", no "second reminder", nothing like that)
 - Never use em-dashes
 - No generic openers like "Hey there"
 - Sound like a real person, not a bot

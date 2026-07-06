@@ -38,9 +38,9 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <main className="min-h-screen relative flex items-center justify-center p-4 bg-gradient-to-br from-slate-50 via-indigo-50/60 to-violet-100/50 overflow-hidden">
-      <div className="pointer-events-none absolute -top-32 -left-32 w-96 h-96 rounded-full bg-indigo-300/30 blur-3xl" />
-      <div className="pointer-events-none absolute -bottom-40 -right-24 w-[28rem] h-[28rem] rounded-full bg-violet-300/30 blur-3xl" />
+    <main className="min-h-screen relative flex items-center justify-center p-4 bg-gradient-to-br from-indigo-200 via-sky-100 to-blue-200 overflow-hidden">
+      <div className="pointer-events-none absolute -top-32 -left-32 w-96 h-96 rounded-full bg-blue-400/30 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-40 -right-24 w-[28rem] h-[28rem] rounded-full bg-indigo-400/30 blur-3xl" />
 
       <div className="relative w-full max-w-md">
         <div className="flex flex-col items-center mb-8">
@@ -48,10 +48,10 @@ export default function ResetPasswordPage() {
             🔑
           </div>
           <h1 className="text-2xl font-bold text-slate-800 tracking-tight">Set a new password</h1>
-          <p className="text-slate-500 text-sm mt-1">Choose a strong password you haven&apos;t used before</p>
+          <p className="text-slate-600 text-sm mt-1">Choose a strong password you haven&apos;t used before</p>
         </div>
 
-        <div className="bg-white/70 backdrop-blur-xl border border-white/80 rounded-3xl shadow-xl shadow-indigo-200/40 p-8">
+        <div className="bg-gradient-to-b from-blue-50/95 to-indigo-100/90 backdrop-blur-xl border border-blue-200/80 rounded-3xl shadow-2xl shadow-indigo-400/30 p-8">
           {error && (
             <div className="mb-5 px-4 py-3 rounded-xl text-sm bg-rose-50 border border-rose-200 text-rose-700">
               {error}
@@ -68,7 +68,7 @@ export default function ResetPasswordPage() {
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full bg-white/80 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-400/60 focus:border-indigo-400 transition-shadow"
+                className="w-full bg-white/90 border border-blue-200 rounded-xl px-4 py-3 text-sm text-slate-800 placeholder-slate-400 hover:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-400/60 focus:border-blue-400 transition-all"
               />
             </div>
             <div>
@@ -80,14 +80,14 @@ export default function ResetPasswordPage() {
                 value={confirmPassword}
                 onChange={e => setConfirmPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full bg-white/80 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-400/60 focus:border-indigo-400 transition-shadow"
+                className="w-full bg-white/90 border border-blue-200 rounded-xl px-4 py-3 text-sm text-slate-800 placeholder-slate-400 hover:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-400/60 focus:border-blue-400 transition-all"
               />
             </div>
 
             <button
               type="submit"
               disabled={busy}
-              className="w-full bg-gradient-to-r from-indigo-500 to-violet-600 hover:from-indigo-600 hover:to-violet-700 disabled:opacity-60 text-white font-semibold text-sm py-3.5 rounded-xl shadow-lg shadow-indigo-500/30 transition-all active:scale-[0.98]"
+              className="w-full bg-gradient-to-r from-blue-600 via-indigo-500 to-violet-600 hover:from-blue-700 hover:via-indigo-600 hover:to-violet-700 hover:shadow-xl hover:shadow-indigo-500/40 hover:-translate-y-0.5 disabled:opacity-60 disabled:hover:translate-y-0 text-white font-semibold text-sm py-3.5 rounded-xl shadow-lg shadow-indigo-500/30 transition-all active:scale-[0.98]"
             >
               {busy ? "Saving..." : "Save New Password"}
             </button>

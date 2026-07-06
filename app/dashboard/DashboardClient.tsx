@@ -164,7 +164,7 @@ function ConfirmDialog({
         <div className="flex gap-3">
           <button
             onClick={onClose}
-            className="flex-1 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 font-medium text-sm py-2.5 rounded-xl transition-colors"
+            className="flex-1 bg-white border border-slate-200 hover:bg-slate-50 hover:shadow-md text-slate-600 font-medium text-sm py-2.5 rounded-xl transition-all active:scale-[0.98]"
           >
             Keep as is
           </button>
@@ -172,8 +172,8 @@ function ConfirmDialog({
             onClick={() => { onConfirm(); onClose(); }}
             className={`flex-1 font-semibold text-sm py-2.5 rounded-xl text-white transition-all active:scale-[0.98] shadow-lg ${
               danger
-                ? "bg-rose-500 hover:bg-rose-600 shadow-rose-500/25"
-                : "bg-indigo-500 hover:bg-indigo-600 shadow-indigo-500/25"
+                ? "bg-rose-500 hover:bg-rose-600 hover:shadow-xl hover:shadow-rose-500/40 hover:-translate-y-0.5 shadow-rose-500/25"
+                : "bg-indigo-500 hover:bg-indigo-600 hover:shadow-xl hover:shadow-indigo-500/40 hover:-translate-y-0.5 shadow-indigo-500/25"
             }`}
           >
             {confirmLabel}
@@ -274,7 +274,7 @@ function TaskCard({
       className={`rounded-2xl border transition-all duration-200 bg-white/70 backdrop-blur-xl ${
         isPendingReview
           ? "border-amber-300 shadow-lg shadow-amber-200/40 ring-1 ring-amber-200"
-          : "border-white/90 shadow-md shadow-indigo-100/50"
+          : "border-white/90 shadow-md shadow-indigo-100/50 hover:shadow-lg hover:shadow-indigo-200/60"
       }`}
     >
       {confirm === "cancel" && (
@@ -396,14 +396,14 @@ function TaskCard({
                 <button
                   disabled={!!working}
                   onClick={() => handle("approve")}
-                  className="flex-1 inline-flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white font-semibold text-sm py-2.5 rounded-xl shadow-lg shadow-emerald-500/25 transition-all active:scale-[0.98]"
+                  className="flex-1 inline-flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-600 hover:shadow-xl hover:shadow-emerald-500/40 hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0 text-white font-semibold text-sm py-2.5 rounded-xl shadow-lg shadow-emerald-500/25 transition-all active:scale-[0.98]"
                 >
                   <IconCheck /> {working === "approve" ? "Approving..." : "Approve & Close"}
                 </button>
                 <button
                   disabled={!!working || !revisionText.trim()}
                   onClick={() => handle("revision")}
-                  className="flex-1 inline-flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white font-semibold text-sm py-2.5 rounded-xl shadow-lg shadow-orange-500/25 transition-all active:scale-[0.98]"
+                  className="flex-1 inline-flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 hover:shadow-xl hover:shadow-orange-500/40 hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0 text-white font-semibold text-sm py-2.5 rounded-xl shadow-lg shadow-orange-500/25 transition-all active:scale-[0.98]"
                 >
                   <IconEdit /> {working === "revision" ? "Sending..." : "Request Revision"}
                 </button>
@@ -411,7 +411,7 @@ function TaskCard({
               <button
                 disabled={!!working}
                 onClick={() => setConfirm("cancel")}
-                className="w-full inline-flex items-center justify-center gap-2 bg-white border border-rose-200 hover:bg-rose-50 text-rose-500 font-medium text-sm py-2.5 rounded-xl transition-colors disabled:opacity-50"
+                className="w-full inline-flex items-center justify-center gap-2 bg-white border border-rose-200 hover:bg-rose-50 hover:border-rose-300 hover:shadow-md hover:-translate-y-0.5 text-rose-500 font-medium text-sm py-2.5 rounded-xl transition-all disabled:opacity-50 disabled:hover:translate-y-0 active:scale-[0.98]"
               >
                 <IconTrash /> Cancel Task
               </button>
@@ -428,14 +428,14 @@ function TaskCard({
                 <button
                   disabled={!!working}
                   onClick={() => setConfirm("followup_now")}
-                  className="flex-1 inline-flex items-center justify-center gap-2 bg-gradient-to-r from-indigo-500 to-violet-600 hover:from-indigo-600 hover:to-violet-700 disabled:opacity-50 text-white font-semibold text-sm py-2.5 rounded-xl shadow-lg shadow-indigo-500/25 transition-all active:scale-[0.98]"
+                  className="flex-1 inline-flex items-center justify-center gap-2 bg-gradient-to-r from-indigo-500 to-violet-600 hover:from-indigo-600 hover:to-violet-700 hover:shadow-xl hover:shadow-indigo-500/40 hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0 text-white font-semibold text-sm py-2.5 rounded-xl shadow-lg shadow-indigo-500/25 transition-all active:scale-[0.98]"
                 >
                   <IconBolt /> {working === "followup_now" ? "Sending..." : "Send Follow-up Now"}
                 </button>
                 <button
                   disabled={!!working}
                   onClick={() => setConfirm("cancel")}
-                  className="flex-1 inline-flex items-center justify-center gap-2 bg-white border border-rose-200 hover:bg-rose-50 text-rose-500 font-medium text-sm py-2.5 rounded-xl transition-colors disabled:opacity-50"
+                  className="flex-1 inline-flex items-center justify-center gap-2 bg-white border border-rose-200 hover:bg-rose-50 hover:border-rose-300 hover:shadow-md hover:-translate-y-0.5 text-rose-500 font-medium text-sm py-2.5 rounded-xl transition-all disabled:opacity-50 disabled:hover:translate-y-0 active:scale-[0.98]"
                 >
                   <IconTrash /> {working === "cancel" ? "Cancelling..." : "Cancel Task"}
                 </button>
@@ -452,7 +452,7 @@ function TaskCard({
               <button
                 disabled={!!working}
                 onClick={() => setConfirm("reopen")}
-                className="w-full inline-flex items-center justify-center gap-2 bg-white border border-indigo-200 hover:bg-indigo-50 text-indigo-500 font-medium text-sm py-2.5 rounded-xl transition-colors disabled:opacity-50"
+                className="w-full inline-flex items-center justify-center gap-2 bg-white border border-indigo-200 hover:bg-indigo-50 hover:border-indigo-300 hover:shadow-md hover:-translate-y-0.5 text-indigo-500 font-medium text-sm py-2.5 rounded-xl transition-all disabled:opacity-50 disabled:hover:translate-y-0 active:scale-[0.98]"
               >
                 <IconRefresh /> {working === "reopen" ? "Reopening..." : "Reopen Task"}
               </button>
@@ -475,7 +475,7 @@ function TaskCard({
               <button
                 disabled={!!working || !messageText.trim()}
                 onClick={() => handle("message")}
-                className="inline-flex items-center gap-2 bg-gradient-to-r from-indigo-500 to-violet-600 hover:from-indigo-600 hover:to-violet-700 disabled:opacity-50 text-white font-semibold text-sm px-4 py-2.5 rounded-xl shadow-md shadow-indigo-500/20 transition-all active:scale-[0.98]"
+                className="inline-flex items-center gap-2 bg-gradient-to-r from-indigo-500 to-violet-600 hover:from-indigo-600 hover:to-violet-700 hover:shadow-lg hover:shadow-indigo-500/40 hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0 text-white font-semibold text-sm px-4 py-2.5 rounded-xl shadow-md shadow-indigo-500/20 transition-all active:scale-[0.98]"
                 title="Send message to Slack thread"
               >
                 {working === "message" ? (
@@ -562,7 +562,7 @@ function NewTaskModal({
           <h2 className="text-lg font-semibold text-slate-800">Assign New Task</h2>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-colors"
+            className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 hover:text-slate-700 hover:rotate-90 text-slate-500 flex items-center justify-center transition-all duration-200"
             aria-label="Close"
           >
             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -589,7 +589,7 @@ function NewTaskModal({
                 <button
                   type="button"
                   onClick={() => { setAssigneeId(""); setUserSearch(""); }}
-                  className="text-xs font-medium text-indigo-500 hover:text-indigo-700 bg-white border border-indigo-200 hover:bg-indigo-50 px-3 py-1.5 rounded-lg transition-colors"
+                  className="text-xs font-medium text-indigo-500 hover:text-indigo-700 bg-white border border-indigo-200 hover:bg-indigo-50 hover:shadow-sm px-3 py-1.5 rounded-lg transition-all active:scale-[0.97]"
                 >
                   Change
                 </button>
@@ -639,14 +639,14 @@ function NewTaskModal({
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 font-medium text-sm py-3 rounded-xl transition-colors"
+              className="flex-1 bg-white border border-slate-200 hover:bg-slate-50 hover:shadow-md text-slate-600 font-medium text-sm py-3 rounded-xl transition-all active:scale-[0.98]"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={!assigneeId || !taskText.trim() || submitting}
-              className="flex-1 bg-gradient-to-r from-indigo-500 to-violet-600 hover:from-indigo-600 hover:to-violet-700 disabled:opacity-50 text-white font-semibold text-sm py-3 rounded-xl shadow-lg shadow-indigo-500/25 transition-all active:scale-[0.98]"
+              className="flex-1 bg-gradient-to-r from-indigo-500 to-violet-600 hover:from-indigo-600 hover:to-violet-700 hover:shadow-xl hover:shadow-indigo-500/40 hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0 text-white font-semibold text-sm py-3 rounded-xl shadow-lg shadow-indigo-500/25 transition-all active:scale-[0.98]"
             >
               {submitting ? "Posting to Slack..." : "Assign Task"}
             </button>
@@ -769,10 +769,10 @@ export default function DashboardClient({
   const visible = filter === "all" ? tasks : tasks.filter(t => t.status === filter);
 
   return (
-    <main className="min-h-screen relative bg-gradient-to-br from-slate-50 via-indigo-50/60 to-violet-100/50 text-slate-800 overflow-x-hidden">
+    <main className="min-h-screen relative bg-gradient-to-br from-indigo-200 via-sky-100 to-blue-200 text-slate-800 overflow-x-hidden">
       {/* Ambient glow orbs */}
-      <div className="pointer-events-none fixed -top-32 -left-32 w-96 h-96 rounded-full bg-indigo-300/25 blur-3xl" />
-      <div className="pointer-events-none fixed -bottom-40 -right-24 w-[28rem] h-[28rem] rounded-full bg-violet-300/25 blur-3xl" />
+      <div className="pointer-events-none fixed -top-32 -left-32 w-96 h-96 rounded-full bg-blue-400/30 blur-3xl" />
+      <div className="pointer-events-none fixed -bottom-40 -right-24 w-[28rem] h-[28rem] rounded-full bg-indigo-400/30 blur-3xl" />
 
       <Toast toasts={toasts} />
       {newTaskOpen && (
@@ -800,7 +800,7 @@ export default function DashboardClient({
             <button
               onClick={() => refresh()}
               disabled={refreshing}
-              className="inline-flex items-center gap-2 bg-white/80 border border-slate-200 hover:bg-white text-slate-600 font-medium text-sm px-4 py-2.5 rounded-xl shadow-sm transition-colors disabled:opacity-60"
+              className="inline-flex items-center gap-2 bg-white/80 border border-slate-200 hover:bg-white hover:shadow-md hover:-translate-y-0.5 text-slate-600 font-medium text-sm px-4 py-2.5 rounded-xl shadow-sm transition-all disabled:opacity-60 disabled:hover:translate-y-0 active:scale-[0.98]"
               title="Refresh tasks"
             >
               <IconRefresh spinning={refreshing} />
@@ -808,13 +808,13 @@ export default function DashboardClient({
             </button>
             <button
               onClick={() => setNewTaskOpen(true)}
-              className="inline-flex items-center gap-2 bg-gradient-to-r from-indigo-500 to-violet-600 hover:from-indigo-600 hover:to-violet-700 text-white font-semibold text-sm px-5 py-2.5 rounded-xl shadow-lg shadow-indigo-500/25 transition-all active:scale-[0.98]"
+              className="inline-flex items-center gap-2 bg-gradient-to-r from-indigo-500 to-violet-600 hover:from-indigo-600 hover:to-violet-700 hover:shadow-xl hover:shadow-indigo-500/40 hover:-translate-y-0.5 text-white font-semibold text-sm px-5 py-2.5 rounded-xl shadow-lg shadow-indigo-500/25 transition-all active:scale-[0.98]"
             >
               <IconPlus /> New Task
             </button>
             <button
               onClick={signOut}
-              className="inline-flex items-center gap-2 bg-white/80 border border-slate-200 hover:bg-white text-slate-500 font-medium text-sm px-3.5 py-2.5 rounded-xl shadow-sm transition-colors"
+              className="inline-flex items-center gap-2 bg-white/80 border border-slate-200 hover:bg-white hover:shadow-md hover:-translate-y-0.5 hover:text-rose-500 text-slate-500 font-medium text-sm px-3.5 py-2.5 rounded-xl shadow-sm transition-all active:scale-[0.98]"
               title="Sign out"
             >
               <IconLogout />
@@ -848,7 +848,7 @@ export default function DashboardClient({
               className={`shrink-0 px-4 py-2 rounded-xl text-sm font-medium transition-all flex items-center gap-1.5 ${
                 filter === f.key
                   ? "bg-slate-800 text-white shadow-md"
-                  : "bg-white/60 text-slate-500 hover:text-slate-700 hover:bg-white border border-white/80"
+                  : "bg-white/60 text-slate-500 hover:text-slate-700 hover:bg-white hover:shadow-md hover:-translate-y-0.5 border border-white/80"
               }`}
             >
               {f.label}
