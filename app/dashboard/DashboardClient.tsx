@@ -9,6 +9,7 @@ import type { Task, TaskComment } from "@/lib/supabase";
 type TaskWithComments = Task & { task_comments: TaskComment[] };
 type SlackUser = { id: string; name: string };
 type ToastType = { id: number; message: string; ok: boolean };
+type TaskAction = "approve" | "cancel" | "revision" | "followup_now" | "reopen" | "message";
 
 const STATUS = {
   active:             { label: "Active",        badge: "bg-indigo-100 text-indigo-700 border-indigo-200",  dot: "bg-indigo-500" },
@@ -157,7 +158,7 @@ function ConfirmDialog({
   // Portal to <body> — ancestors with backdrop-filter would otherwise trap the fixed overlay
   return createPortal(
     <div className="fixed inset-0 bg-slate-900/30 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white/90 backdrop-blur-xl border border-white rounded-2xl w-full max-w-sm shadow-2xl shadow-indigo-200/50 p-6">
+      <div className="bg-white/90 backdrop-blur-xl border border-white rounded-2xl w-full max-w-sm shadow-2xl shadow-indigo-200/50 p-6 anim-pop">
         <h3 className="text-base font-semibold text-slate-800 mb-2">{title}</h3>
         <p className="text-sm text-slate-500 mb-6 leading-relaxed">{body}</p>
         <div className="flex gap-3">
@@ -233,11 +234,12 @@ function TaskCard({
   task: TaskWithComments;
   expanded: boolean;
   onToggle: () => void;
-  onAction: (taskId: string, action: "approve" | "cancel" | "revision" | "followup_now", content?: string) => Promise<void>;
+  onAction: (taskId: string, action: TaskAction, content?: string) => Promise<void>;
 }) {
   const [revisionText, setRevisionText] = useState("");
+  const [messageText, setMessageText] = useState("");
   const [working, setWorking] = useState<string | null>(null);
-  const [confirm, setConfirm] = useState<"cancel" | "followup_now" | null>(null);
+  const [confirm, setConfirm] = useState<"cancel" | "followup_now" | "reopen" | null>(null);
   const threadRef = useRef<HTMLDivElement>(null);
   const cfg = STATUS[task.status] ?? STATUS.active;
   const isPendingReview = task.status === "pending_review";
@@ -249,11 +251,15 @@ function TaskCard({
     }
   }, [expanded, task.task_comments]);
 
-  async function handle(action: "approve" | "cancel" | "revision" | "followup_now") {
+  async function handle(action: TaskAction) {
     if (action === "revision" && !revisionText.trim()) return;
+    if (action === "message" && !messageText.trim()) return;
     setWorking(action);
-    await onAction(task.id, action, action === "revision" ? revisionText : undefined);
+    const content =
+      action === "revision" ? revisionText : action === "message" ? messageText : undefined;
+    await onAction(task.id, action, content);
     if (action === "revision") setRevisionText("");
+    if (action === "message") setMessageText("");
     setWorking(null);
   }
 
@@ -278,6 +284,15 @@ function TaskCard({
           confirmLabel="Yes, cancel task"
           danger
           onConfirm={() => handle("cancel")}
+          onClose={() => setConfirm(null)}
+        />
+      )}
+      {confirm === "reopen" && (
+        <ConfirmDialog
+          title="Reopen this task?"
+          body={`${task.assigned_to_name} will be notified in Slack that the task is active again, and the follow-up schedule will restart from the beginning.`}
+          confirmLabel="Yes, reopen task"
+          onConfirm={() => handle("reopen")}
           onClose={() => setConfirm(null)}
         />
       )}
@@ -346,7 +361,7 @@ function TaskCard({
 
       {/* Expanded thread + actions */}
       {expanded && (
-        <div className="border-t border-slate-100 px-5 pb-5 pt-4">
+        <div className="border-t border-slate-100 px-5 pb-5 pt-4 anim-expand">
           {/* Conversation thread */}
           {sortedComments.length > 0 ? (
             <div
@@ -428,12 +443,55 @@ function TaskCard({
             </div>
           )}
 
-          {/* Read-only for closed statuses */}
+          {/* Closed statuses: allow reopening */}
           {(task.status === "completed" || task.status === "escalated" || task.status === "cancelled") && (
-            <p className="text-xs text-slate-400 text-center italic py-2">
-              This task is closed.
-            </p>
+            <div className="space-y-3">
+              <p className="text-xs text-slate-400 text-center italic">
+                This task is closed. You can still message the thread below, or reopen it.
+              </p>
+              <button
+                disabled={!!working}
+                onClick={() => setConfirm("reopen")}
+                className="w-full inline-flex items-center justify-center gap-2 bg-white border border-indigo-200 hover:bg-indigo-50 text-indigo-500 font-medium text-sm py-2.5 rounded-xl transition-colors disabled:opacity-50"
+              >
+                <IconRefresh /> {working === "reopen" ? "Reopening..." : "Reopen Task"}
+              </button>
+            </div>
           )}
+
+          {/* Message composer — talk to the assignee in the Slack thread without changing status */}
+          <div className="mt-4 pt-4 border-t border-slate-100">
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={messageText}
+                onChange={e => setMessageText(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === "Enter" && messageText.trim() && !working) handle("message");
+                }}
+                placeholder={`Message ${task.assigned_to_name} in the Slack thread...`}
+                className="flex-1 bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-300/60 focus:border-indigo-300"
+              />
+              <button
+                disabled={!!working || !messageText.trim()}
+                onClick={() => handle("message")}
+                className="inline-flex items-center gap-2 bg-gradient-to-r from-indigo-500 to-violet-600 hover:from-indigo-600 hover:to-violet-700 disabled:opacity-50 text-white font-semibold text-sm px-4 py-2.5 rounded-xl shadow-md shadow-indigo-500/20 transition-all active:scale-[0.98]"
+                title="Send message to Slack thread"
+              >
+                {working === "message" ? (
+                  "Sending..."
+                ) : (
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="m22 2-7 20-4-9-9-4Z" />
+                    <path d="M22 2 11 13" />
+                  </svg>
+                )}
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-400 mt-1.5 px-1">
+              Sends to the Slack thread with a real @mention. Doesn&apos;t change status or follow-ups.
+            </p>
+          </div>
         </div>
       )}
     </div>
@@ -499,7 +557,7 @@ function NewTaskModal({
 
   return (
     <div className="fixed inset-0 bg-slate-900/30 backdrop-blur-sm z-40 flex items-center justify-center p-4">
-      <div className="bg-white/90 backdrop-blur-xl border border-white rounded-3xl w-full max-w-lg shadow-2xl shadow-indigo-200/50">
+      <div className="bg-white/90 backdrop-blur-xl border border-white rounded-3xl w-full max-w-lg shadow-2xl shadow-indigo-200/50 anim-pop">
         <div className="flex items-center justify-between p-6 border-b border-slate-100">
           <h2 className="text-lg font-semibold text-slate-800">Assign New Task</h2>
           <button
@@ -519,6 +577,23 @@ function NewTaskModal({
             <label className="block text-sm font-medium text-slate-600 mb-2">Assign to</label>
             {loadingUsers ? (
               <div className="text-sm text-slate-400 py-2">Loading team members...</div>
+            ) : selectedUser ? (
+              // Once chosen, only the selected person is shown
+              <div className="flex items-center justify-between bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-3 anim-pop">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 text-white flex items-center justify-center text-sm font-bold">
+                    {selectedUser.name.charAt(0).toUpperCase()}
+                  </div>
+                  <span className="text-sm font-semibold text-slate-700">{selectedUser.name}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => { setAssigneeId(""); setUserSearch(""); }}
+                  className="text-xs font-medium text-indigo-500 hover:text-indigo-700 bg-white border border-indigo-200 hover:bg-indigo-50 px-3 py-1.5 rounded-lg transition-colors"
+                >
+                  Change
+                </button>
+              </div>
             ) : (
               <div className="space-y-2">
                 <input
@@ -537,21 +612,12 @@ function NewTaskModal({
                       key={u.id}
                       type="button"
                       onClick={() => { setAssigneeId(u.id); setUserSearch(""); }}
-                      className={`w-full text-left px-4 py-2.5 text-sm transition-colors ${
-                        assigneeId === u.id
-                          ? "bg-indigo-500 text-white"
-                          : "text-slate-600 hover:bg-indigo-50"
-                      }`}
+                      className="w-full text-left px-4 py-2.5 text-sm text-slate-600 hover:bg-indigo-50 transition-colors"
                     >
                       {u.name}
                     </button>
                   ))}
                 </div>
-                {selectedUser && (
-                  <p className="text-xs text-indigo-500">
-                    Selected: <span className="font-semibold">{selectedUser.name}</span>
-                  </p>
-                )}
               </div>
             )}
           </div>
@@ -647,15 +713,17 @@ export default function DashboardClient({
     router.refresh();
   }
 
-  async function handleAction(
-    taskId: string,
-    action: "approve" | "cancel" | "revision" | "followup_now",
-    content?: string
-  ) {
+  async function handleAction(taskId: string, action: TaskAction, content?: string) {
     try {
       let res: Response;
       if (action === "revision") {
         res = await fetch(`/api/tasks/${taskId}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ content }),
+        });
+      } else if (action === "message") {
+        res = await fetch(`/api/tasks/${taskId}/message`, {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ content }),
@@ -669,11 +737,13 @@ export default function DashboardClient({
       }
 
       if (res.ok) {
-        const msgs = {
+        const msgs: Record<TaskAction, string> = {
           approve: "Task approved and closed",
           cancel: "Task cancelled — assignee notified in Slack",
           revision: "Revision sent to the Slack thread",
           followup_now: "Follow-up sent to Slack",
+          reopen: "Task reopened — assignee notified in Slack",
+          message: "Message sent to the Slack thread",
         };
         addToast(msgs[action], true);
         await refresh({ silent: true });
@@ -761,8 +831,8 @@ export default function DashboardClient({
             { label: "Revision",     count: counts.revision_requested, color: "text-orange-500",  ring: "from-orange-400/20" },
             { label: "Done",         count: counts.completed,          color: "text-emerald-500", ring: "from-emerald-400/20" },
             { label: "Escalated",    count: counts.escalated,          color: "text-rose-500",    ring: "from-rose-400/20" },
-          ].map(s => (
-            <div key={s.label} className={`bg-white/70 backdrop-blur-xl rounded-2xl p-4 border border-white/90 shadow-md shadow-indigo-100/50 text-center bg-gradient-to-b ${s.ring} to-transparent`}>
+          ].map((s, i) => (
+            <div key={s.label} className={`bg-white/70 backdrop-blur-xl rounded-2xl p-4 border border-white/90 shadow-md shadow-indigo-100/50 text-center bg-gradient-to-b ${s.ring} to-transparent anim-rise hover:-translate-y-0.5 hover:shadow-lg transition-all duration-200`} style={{ animationDelay: `${i * 60}ms` }}>
               <p className="text-slate-400 text-xs mb-1">{s.label}</p>
               <p className={`text-2xl font-bold ${s.color}`}>{s.count}</p>
             </div>
@@ -803,14 +873,15 @@ export default function DashboardClient({
               {filter === "all" ? "No tasks yet. Create one above!" : `No ${filter.replace(/_/g, " ")} tasks.`}
             </div>
           )}
-          {visible.map(task => (
-            <TaskCard
-              key={task.id}
-              task={task}
-              expanded={expandedId === task.id}
-              onToggle={() => setExpandedId(expandedId === task.id ? null : task.id)}
-              onAction={handleAction}
-            />
+          {visible.map((task, i) => (
+            <div key={task.id} className="anim-rise" style={{ animationDelay: `${Math.min(i, 8) * 50}ms` }}>
+              <TaskCard
+                task={task}
+                expanded={expandedId === task.id}
+                onToggle={() => setExpandedId(expandedId === task.id ? null : task.id)}
+                onAction={handleAction}
+              />
+            </div>
           ))}
         </div>
       </div>

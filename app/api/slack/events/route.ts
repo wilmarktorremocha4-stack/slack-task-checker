@@ -193,20 +193,39 @@ async function handleThreadReply(
 
   console.log("[reply] looking up task for thread_ts:", threadTs, "userId:", userId);
 
-  // Match tasks that are open (active or revision_requested)
+  // Match the task for this thread regardless of status, so late replies,
+  // questions, and mistakes still show up on the dashboard timeline
   const { data: task } = await supabase
     .from("tasks")
     .select("*")
     .eq("thread_ts", threadTs)
-    .in("status", ["active", "revision_requested"])
-    .single();
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
   if (!task) {
-    console.log("[reply] no open task found for this thread");
+    console.log("[reply] no task found for this thread");
     return;
   }
 
   const isAssignee = userId === task.assigned_to_id;
+  const isOpen = task.status === "active" || task.status === "revision_requested";
+
+  // Closed or under-review tasks: just log the reply for dashboard visibility
+  if (!isOpen) {
+    if (rawText.length > 0) {
+      const authorName = isAssignee ? task.assigned_to_name : await getSlackUserName(userId);
+      await supabase.from("task_comments").insert({
+        task_id: task.id,
+        author_type: isAssignee ? "assignee" : "system",
+        author_name: authorName,
+        content: isAssignee ? rawText : `${authorName} (in thread): ${rawText}`,
+        sent_to_slack: false,
+      });
+      console.log(`[reply] logged reply on ${task.status} task for dashboard visibility`);
+    }
+    return;
+  }
 
   // Broad set of completion phrases
   const isDoneMessage =
@@ -259,15 +278,16 @@ async function handleThreadReply(
     return;
   }
 
-  // Log all other assignee replies for full thread visibility on the dashboard
-  if (isAssignee && rawText.length > 0) {
+  // Log every other human reply for full thread visibility on the dashboard
+  if (rawText.length > 0) {
+    const authorName = isAssignee ? task.assigned_to_name : await getSlackUserName(userId);
     await supabase.from("task_comments").insert({
       task_id: task.id,
-      author_type: "assignee",
-      author_name: task.assigned_to_name,
-      content: rawText,
+      author_type: isAssignee ? "assignee" : "system",
+      author_name: authorName,
+      content: isAssignee ? rawText : `${authorName} (in thread): ${rawText}`,
       sent_to_slack: false,
     });
-    console.log("[reply] assignee reply logged, follow-ups continue");
+    console.log("[reply] thread reply logged, follow-ups continue");
   }
 }

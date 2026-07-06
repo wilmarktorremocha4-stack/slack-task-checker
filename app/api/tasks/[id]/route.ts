@@ -31,7 +31,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
   const { id } = await params;
   const supabase = createSupabaseAdmin();
   const { action } = (await request.json()) as {
-    action: "approve" | "cancel" | "followup_now";
+    action: "approve" | "cancel" | "followup_now" | "reopen";
   };
 
   const { data: task } = await supabase
@@ -88,6 +88,38 @@ export async function PATCH(request: Request, { params }: RouteContext) {
       author_type: "system",
       author_name: "System",
       content: `Task cancelled by ${task.assigned_by_name}.`,
+      sent_to_slack: true,
+    });
+  } else if (action === "reopen") {
+    if (task.status === "active" || task.status === "revision_requested") {
+      return NextResponse.json({ error: "Task is already open" }, { status: 409 });
+    }
+
+    const nextFollowupAt = calculateNextFollowupAt(0);
+
+    await supabase
+      .from("tasks")
+      .update({
+        status: "active",
+        followup_count: 0,
+        next_followup_at: nextFollowupAt?.toISOString() ?? null,
+        completed_at: null,
+        escalated_at: null,
+      })
+      .eq("id", id);
+
+    await postThreadReply(
+      task.channel_id,
+      task.thread_ts,
+      `${slackMention(task.assigned_to_id)} this task has been reopened by ${task.assigned_by_name}:\n> ${task.task_text}\n\nReply *"done"* in this thread when it's complete.`,
+      { broadcast: true }
+    );
+
+    await supabase.from("task_comments").insert({
+      task_id: id,
+      author_type: "system",
+      author_name: "System",
+      content: `Task reopened by ${task.assigned_by_name}. Follow-up schedule restarted.`,
       sent_to_slack: true,
     });
   } else if (action === "followup_now") {
