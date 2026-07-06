@@ -55,9 +55,9 @@ export async function generateFollowupMessage(options: {
   assignerName: string;
   followupNumber: number;
   urgency: ReturnType<typeof getFollowupUrgency>;
+  nextFollowupHuman?: string | null;
 }): Promise<string> {
-  // followupNumber drives the tone via `urgency` but is never shown to the assignee
-  const { taskText, assigneeName, assignerName, urgency } = options;
+  const { taskText, assigneeName, assignerName, urgency, nextFollowupHuman } = options;
 
   const toneGuide = {
     gentle:
@@ -92,7 +92,7 @@ Rules:
         },
         {
           role: "user",
-          content: `Write a follow-up message for ${assigneeName} about this task: "${taskText}". This was assigned by ${assignerName}.`,
+          content: `Write a follow-up message for ${assigneeName} about this task: "${taskText}". This was assigned by ${assignerName}.${nextFollowupHuman ? ` If they don't respond, the next follow-up will be sent ${nextFollowupHuman}. Do NOT include that timestamp in the message.` : ""}`,
         },
       ],
       max_tokens: 200,

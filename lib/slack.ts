@@ -65,8 +65,39 @@ export async function postThreadReply(
     thread_ts: threadTs,
     text,
     mrkdwn: true,
-    // Surfaces the reply in the main channel too, so it can't be missed
     reply_broadcast: options?.broadcast ?? false,
+  });
+}
+
+// Post a message with a colored left-border stripe using Slack attachments.
+// color: any hex like "#3B82F6" or Slack keywords "good", "warning", "danger"
+export async function postColoredMessage(
+  channelId: string,
+  threadTs: string,
+  color: string,
+  text: string,
+  contextLine?: string,
+  options?: { broadcast?: boolean }
+): Promise<void> {
+  const slack = getSlackClient();
+  const blocks = contextLine
+    ? [
+        { type: "section", text: { type: "mrkdwn", text } },
+        { type: "context", elements: [{ type: "mrkdwn", text: contextLine }] },
+      ]
+    : [{ type: "section", text: { type: "mrkdwn", text } }];
+
+  await slack.chat.postMessage({
+    channel: channelId,
+    thread_ts: threadTs,
+    text,
+    reply_broadcast: options?.broadcast ?? false,
+    attachments: [
+      {
+        color,
+        blocks,
+      },
+    ],
   });
 }
 

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdmin } from "@/lib/supabase";
-import { getSlackClient, getSlackUserName } from "@/lib/slack";
+import { getSlackClient, getSlackUserName, postColoredMessage } from "@/lib/slack";
 import { calculateNextFollowupAt } from "@/lib/followup-schedule";
 
 export const runtime = "nodejs";
@@ -45,13 +45,30 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const body = await request.json();
-  const { assigneeId, assigneeName, taskText } = body as {
-    assigneeId: string;
-    assigneeName: string;
+  const {
+    assigneeIds,
+    assigneeNames,
+    taskText,
+    followupSchedule,
+    dueDate,
+    // legacy single-assignee fields (Slack events path)
+    assigneeId,
+    assigneeName,
+  } = body as {
+    assigneeIds?: string[];
+    assigneeNames?: string[];
     taskText: string;
+    followupSchedule?: string[] | null;
+    dueDate?: string | null;
+    assigneeId?: string;
+    assigneeName?: string;
   };
 
-  if (!assigneeId || !assigneeName || !taskText?.trim()) {
+  // Normalise to arrays (support both single and multi-assignee)
+  const ids: string[] = assigneeIds?.length ? assigneeIds : assigneeId ? [assigneeId] : [];
+  const names: string[] = assigneeNames?.length ? assigneeNames : assigneeName ? [assigneeName] : [];
+
+  if (!ids.length || !names.length || !taskText?.trim()) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
   }
 
@@ -60,11 +77,45 @@ export async function POST(request: Request) {
 
   const brandonName = await getSlackUserName(brandonUserId);
 
+  // Determine next follow-up time
+  let nextFollowupAt: Date | null = null;
+  if (followupSchedule && followupSchedule.length > 0) {
+    nextFollowupAt = new Date(followupSchedule[0]);
+  } else {
+    nextFollowupAt = calculateNextFollowupAt(0);
+  }
+
+  const mentions = ids.map(id => `<@${id}>`).join(" ");
+  const nameList = names.join(", ");
+
+  // Post the initial task message with blue stripe
   const slack = getSlackClient();
   const slackResult = await slack.chat.postMessage({
     channel: channelId,
-    text: `<@${assigneeId}> ${brandonName} has assigned you a task:\n> ${taskText.trim()}\n\nReply *"done"* in this thread when you've completed it.`,
-    mrkdwn: true,
+    text: `${mentions} ${brandonName} has assigned you a task:\n> ${taskText.trim()}\n\nReply *"done"* in this thread when you've completed it.`,
+    attachments: [
+      {
+        color: "#3B82F6",
+        blocks: [
+          {
+            type: "section",
+            text: {
+              type: "mrkdwn",
+              text: `*New task assigned* by ${brandonName}\n\n${mentions}\n\n> ${taskText.trim()}`,
+            },
+          },
+          {
+            type: "context",
+            elements: [
+              {
+                type: "mrkdwn",
+                text: `Reply *"done"* when complete${dueDate ? ` · Due: ${new Date(dueDate).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hour12: true })}` : ""}`,
+              },
+            ],
+          },
+        ],
+      },
+    ],
   });
 
   if (!slackResult.ok || !slackResult.ts) {
@@ -72,7 +123,6 @@ export async function POST(request: Request) {
   }
 
   const messageTs = slackResult.ts;
-  const nextFollowupAt = calculateNextFollowupAt(0);
   const supabase = createSupabaseAdmin();
 
   const { data: task, error } = await supabase
@@ -80,8 +130,10 @@ export async function POST(request: Request) {
     .insert({
       task_text: taskText.trim(),
       raw_message: taskText.trim(),
-      assigned_to_id: assigneeId,
-      assigned_to_name: assigneeName,
+      assigned_to_id: ids[0],
+      assigned_to_name: names[0],
+      assignee_ids: ids,
+      assignee_names: names,
       assigned_by_id: brandonUserId,
       assigned_by_name: brandonName,
       channel_id: channelId,
@@ -89,7 +141,9 @@ export async function POST(request: Request) {
       thread_ts: messageTs,
       status: "active",
       followup_count: 0,
-      max_followups: 5,
+      max_followups: followupSchedule ? followupSchedule.length : 5,
+      followup_schedule: followupSchedule ?? null,
+      due_date: dueDate ?? null,
       next_followup_at: nextFollowupAt?.toISOString() ?? null,
     })
     .select()
@@ -103,7 +157,7 @@ export async function POST(request: Request) {
     task_id: task.id,
     author_type: "system",
     author_name: "System",
-    content: `Task created from dashboard by ${brandonName} and posted to Slack.`,
+    content: `Task assigned to ${nameList} by ${brandonName} and posted to Slack.`,
     sent_to_slack: false,
   });
 

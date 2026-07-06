@@ -72,8 +72,11 @@ function applySort(tasks: TaskWithComments[], sort: SortBy) {
 function groupByEmployee(tasks: TaskWithComments[]) {
   const map: Record<string, TaskWithComments[]> = {};
   for (const t of tasks) {
-    if (!map[t.assigned_to_name]) map[t.assigned_to_name] = [];
-    map[t.assigned_to_name].push(t);
+    const names = t.assignee_names?.length ? t.assignee_names : [t.assigned_to_name];
+    for (const name of names) {
+      if (!map[name]) map[name] = [];
+      if (!map[name].includes(t)) map[name].push(t);
+    }
   }
   return map;
 }
@@ -110,6 +113,20 @@ function IconSend() {
 }
 function IconUser() {
   return <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>;
+}
+
+function AppLogo({ size = "md" }: { size?: "sm" | "md" | "lg" }) {
+  const dim = size === "sm" ? "w-8 h-8" : size === "lg" ? "w-16 h-16" : "w-11 h-11";
+  const icon = size === "sm" ? "w-4 h-4" : size === "lg" ? "w-8 h-8" : "w-5 h-5";
+  return (
+    <div className={`${dim} rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/30 shrink-0`}
+      style={{ background: "linear-gradient(135deg, #1d4ed8 0%, #3b82f6 50%, #60a5fa 100%)" }}>
+      <svg className={`${icon} text-white`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M9 11l3 3L22 4" />
+        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+      </svg>
+    </div>
+  );
 }
 function IconSpinner() {
   return (
@@ -276,7 +293,9 @@ function TaskCard({ task, expanded, onToggle, onAction }: {
           </div>
           <p className="font-medium text-slate-100 leading-snug">{task.task_text}</p>
           <p className="text-sm text-slate-500 mt-1">
-            <span className="text-slate-300 font-medium">{task.assigned_to_name}</span>
+            <span className="text-slate-300 font-medium">
+              {(task.assignee_names?.length ? task.assignee_names : [task.assigned_to_name]).join(", ")}
+            </span>
             <span className="mx-1 text-slate-600">·</span>
             assigned by {task.assigned_by_name}
           </p>
@@ -368,7 +387,7 @@ function TaskCard({ task, expanded, onToggle, onAction }: {
                       value={messageText}
                       onChange={e => setMessageText(e.target.value)}
                       onKeyDown={e => { if (e.key === "Enter" && messageText.trim() && !working) handle("message"); }}
-                      placeholder={`Message ${task.assigned_to_name} in the Slack thread...`}
+                      placeholder={`Message ${(task.assignee_names?.length ? task.assignee_names : [task.assigned_to_name]).join(", ")} in the Slack thread...`}
                       className="flex-1 bg-slate-800/60 border border-slate-700/60 rounded-xl px-4 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40"
                     />
                     <button
@@ -459,30 +478,73 @@ function EmployeeView({ tasks, sortBy, expandedId, onToggle, onAction }: {
 
 // ── New Task Modal ──────────────────────────────────────────────────────────
 
+const INPUT_CLS = "w-full bg-slate-800/60 border border-slate-700/60 rounded-xl px-4 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40";
+
 function NewTaskModal({ onClose, onCreated, toast }: {
   onClose: () => void; onCreated: () => void; toast: (msg: string, ok: boolean) => void;
 }) {
   const [users, setUsers] = useState<SlackUser[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
-  const [assigneeId, setAssigneeId] = useState("");
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [taskText, setTaskText] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [userSearch, setUserSearch] = useState("");
+
+  // Follow-up schedule: array of datetime-local strings
+  const [followups, setFollowups] = useState<string[]>([""]);
+  // Due date: "open" | "custom"
+  const [dueDateMode, setDueDateMode] = useState<"open" | "custom">("open");
+  const [dueDateVal, setDueDateVal] = useState("");
 
   useEffect(() => {
     fetch("/api/slack/users", { cache: "no-store" })
       .then(r => r.json()).then(d => setUsers(d.members ?? [])).catch(() => setUsers([])).finally(() => setLoadingUsers(false));
   }, []);
 
-  const filteredUsers = userSearch ? users.filter(u => u.name.toLowerCase().includes(userSearch.toLowerCase())) : users;
-  const selectedUser = users.find(u => u.id === assigneeId);
+  const filteredUsers = userSearch
+    ? users.filter(u => u.name.toLowerCase().includes(userSearch.toLowerCase()))
+    : users;
+
+  function toggleUser(u: SlackUser) {
+    setSelectedIds(prev =>
+      prev.includes(u.id) ? prev.filter(id => id !== u.id) : [...prev, u.id]
+    );
+  }
+
+  function addFollowup() { setFollowups(prev => [...prev, ""]); }
+  function removeFollowup(i: number) { setFollowups(prev => prev.filter((_, idx) => idx !== i)); }
+  function setFollowupAt(i: number, val: string) { setFollowups(prev => { const n = [...prev]; n[i] = val; return n; }); }
+
+  const dueMs = dueDateMode === "custom" && dueDateVal ? new Date(dueDateVal).getTime() : null;
+  const followupWarnings = followups.map(f => {
+    if (!f || !dueMs) return false;
+    return new Date(f).getTime() > dueMs;
+  });
+  const hasWarning = followupWarnings.some(Boolean);
+  const filledFollowups = followups.filter(f => f.trim());
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!assigneeId || !taskText.trim()) return;
+    if (!selectedIds.length || !taskText.trim() || hasWarning) return;
+    if (filledFollowups.length === 0) return;
+
+    const selectedUsers = selectedIds.map(id => users.find(u => u.id === id)!).filter(Boolean);
+    const followupSchedule = filledFollowups.map(f => new Date(f).toISOString());
+    const dueDate = dueDateMode === "custom" && dueDateVal ? new Date(dueDateVal).toISOString() : null;
+
     setSubmitting(true);
     try {
-      const res = await fetch("/api/tasks", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ assigneeId, assigneeName: selectedUser?.name ?? assigneeId, taskText }) });
+      const res = await fetch("/api/tasks", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          assigneeIds: selectedUsers.map(u => u.id),
+          assigneeNames: selectedUsers.map(u => u.name),
+          taskText,
+          followupSchedule,
+          dueDate,
+        }),
+      });
       if (res.ok) { toast("Task created and posted to Slack", true); onCreated(); onClose(); }
       else { const d = await res.json(); toast(d.error ?? "Failed to create task", false); }
     } catch { toast("Network error — please try again", false); }
@@ -490,52 +552,151 @@ function NewTaskModal({ onClose, onCreated, toast }: {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-40 flex items-center justify-center p-4">
-      <div className="bg-slate-900/95 backdrop-blur-xl border border-slate-700/60 rounded-3xl w-full max-w-lg shadow-2xl shadow-black/60 anim-pop">
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-40 flex items-center justify-center p-4 overflow-y-auto">
+      <div className="bg-slate-900/95 backdrop-blur-xl border border-slate-700/60 rounded-3xl w-full max-w-lg shadow-2xl shadow-black/60 anim-pop my-4">
         <div className="flex items-center justify-between p-6 border-b border-slate-700/40">
           <h2 className="text-lg font-semibold text-slate-100">Assign New Task</h2>
           <button onClick={onClose} className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 flex items-center justify-center transition-all hover:rotate-90 duration-200">
             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
           </button>
         </div>
+
         <form onSubmit={submit} className="p-6 space-y-5">
+          {/* Assignees */}
           <div>
-            <label className="block text-sm font-medium text-slate-400 mb-2">Assign to</label>
+            <label className="block text-sm font-medium text-slate-400 mb-2">
+              Assign to <span className="text-slate-600">(select one or more)</span>
+            </label>
             {loadingUsers ? (
               <div className="text-sm text-slate-500 py-2">Loading team members...</div>
-            ) : selectedUser ? (
-              <div className="flex items-center justify-between bg-blue-500/10 border border-blue-500/30 rounded-xl px-4 py-3 anim-pop">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-blue-700 text-white flex items-center justify-center text-sm font-bold">{selectedUser.name.charAt(0).toUpperCase()}</div>
-                  <span className="text-sm font-semibold text-slate-200">{selectedUser.name}</span>
-                </div>
-                <button type="button" onClick={() => { setAssigneeId(""); setUserSearch(""); }} className="text-xs font-medium text-blue-400 hover:text-blue-300 bg-slate-800 border border-slate-700 hover:border-blue-500/40 px-3 py-1.5 rounded-lg transition-all">
-                  Change
-                </button>
-              </div>
             ) : (
               <div className="space-y-2">
-                <input type="text" placeholder="Search team members..." value={userSearch} onChange={e => setUserSearch(e.target.value)} className="w-full bg-slate-800/60 border border-slate-700/60 rounded-xl px-4 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40" />
-                <div className="max-h-40 overflow-y-auto bg-slate-800/60 border border-slate-700/60 rounded-xl divide-y divide-slate-700/40">
+                <input
+                  type="text"
+                  placeholder="Search team members..."
+                  value={userSearch}
+                  onChange={e => setUserSearch(e.target.value)}
+                  className={INPUT_CLS}
+                />
+                {/* Selected chips */}
+                {selectedIds.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {selectedIds.map(id => {
+                      const u = users.find(u => u.id === id);
+                      if (!u) return null;
+                      return (
+                        <span key={id} className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/15 border border-blue-500/30 text-blue-300 text-xs font-medium">
+                          {u.name}
+                          <button type="button" onClick={() => toggleUser(u)} className="text-blue-400 hover:text-white transition-colors">
+                            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+                          </button>
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+                <div className="max-h-36 overflow-y-auto bg-slate-800/60 border border-slate-700/60 rounded-xl divide-y divide-slate-700/40">
                   {filteredUsers.length === 0 && <p className="text-sm text-slate-500 p-3 text-center">No members found</p>}
-                  {filteredUsers.map(u => (
-                    <button key={u.id} type="button" onClick={() => { setAssigneeId(u.id); setUserSearch(""); }} className="w-full text-left px-4 py-2.5 text-sm text-slate-400 hover:bg-blue-500/10 hover:text-slate-200 transition-colors">
-                      {u.name}
-                    </button>
-                  ))}
+                  {filteredUsers.map(u => {
+                    const sel = selectedIds.includes(u.id);
+                    return (
+                      <button key={u.id} type="button" onClick={() => toggleUser(u)}
+                        className={`w-full text-left px-4 py-2.5 text-sm flex items-center justify-between transition-colors ${sel ? "bg-blue-500/10 text-slate-200" : "text-slate-400 hover:bg-blue-500/10 hover:text-slate-200"}`}
+                      >
+                        {u.name}
+                        {sel && <svg className="w-4 h-4 text-blue-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}
           </div>
+
+          {/* Task description */}
           <div>
             <label className="block text-sm font-medium text-slate-400 mb-2">Task description</label>
-            <textarea required value={taskText} onChange={e => setTaskText(e.target.value)} placeholder="e.g. Prepare the supplier outreach plan by Friday" className="w-full bg-slate-800/60 border border-slate-700/60 rounded-xl px-4 py-3 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 resize-none" rows={4} />
+            <textarea
+              required
+              value={taskText}
+              onChange={e => setTaskText(e.target.value)}
+              placeholder="e.g. Prepare the supplier outreach plan by Friday"
+              className="w-full bg-slate-800/60 border border-slate-700/60 rounded-xl px-4 py-3 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 resize-none"
+              rows={3}
+            />
           </div>
+
+          {/* Due date */}
+          <div>
+            <label className="block text-sm font-medium text-slate-400 mb-2">Due date</label>
+            <div className="flex gap-2 mb-2">
+              {(["open", "custom"] as const).map(m => (
+                <button key={m} type="button" onClick={() => setDueDateMode(m)}
+                  className={`px-4 py-1.5 rounded-lg text-sm font-medium border transition-all ${dueDateMode === m ? "bg-blue-600/20 border-blue-500/40 text-blue-300" : "bg-slate-800/60 border-slate-700/40 text-slate-500 hover:text-slate-300"}`}
+                >
+                  {m === "open" ? "Open (no due date)" : "Custom date"}
+                </button>
+              ))}
+            </div>
+            {dueDateMode === "custom" && (
+              <input
+                type="datetime-local"
+                value={dueDateVal}
+                onChange={e => setDueDateVal(e.target.value)}
+                className={INPUT_CLS}
+              />
+            )}
+          </div>
+
+          {/* Follow-up schedule */}
+          <div>
+            <label className="block text-sm font-medium text-slate-400 mb-2">Follow-up schedule</label>
+            <div className="space-y-2">
+              {followups.map((f, i) => (
+                <div key={i} className="flex gap-2 items-center">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-xs text-slate-500">
+                        {i === 0 ? "1st Follow-up" : i === 1 ? "2nd Follow-up" : i === 2 ? "3rd Follow-up" : `${i + 1}th Follow-up`}
+                      </span>
+                      {followupWarnings[i] && (
+                        <span className="text-xs text-rose-400">⚠ After due date</span>
+                      )}
+                    </div>
+                    <input
+                      type="datetime-local"
+                      value={f}
+                      onChange={e => setFollowupAt(i, e.target.value)}
+                      className={`${INPUT_CLS} ${followupWarnings[i] ? "border-rose-500/50 focus:ring-rose-500/30" : ""}`}
+                    />
+                  </div>
+                  {followups.length > 1 && (
+                    <button type="button" onClick={() => removeFollowup(i)}
+                      className="mt-5 w-8 h-8 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:bg-rose-500/20 flex items-center justify-center transition-all shrink-0"
+                    >
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+                    </button>
+                  )}
+                </div>
+              ))}
+              <button type="button" onClick={addFollowup}
+                className="inline-flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 bg-blue-500/10 border border-blue-500/20 hover:border-blue-500/40 px-3 py-1.5 rounded-lg transition-all"
+              >
+                <IconPlus /> Add follow-up
+              </button>
+            </div>
+          </div>
+
+          {/* Actions */}
           <div className="flex gap-3 pt-1">
             <button type="button" onClick={onClose} className="flex-1 bg-slate-800 border border-slate-700 hover:bg-slate-700 text-slate-300 font-medium text-sm py-3 rounded-xl transition-all active:scale-[0.98]">
               Cancel
             </button>
-            <button type="submit" disabled={!assigneeId || !taskText.trim() || submitting} className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 hover:shadow-xl hover:shadow-blue-500/25 hover:-translate-y-0.5 disabled:opacity-50 text-white font-semibold text-sm py-3 rounded-xl shadow-lg shadow-blue-500/20 transition-all active:scale-[0.98]">
+            <button
+              type="submit"
+              disabled={!selectedIds.length || !taskText.trim() || filledFollowups.length === 0 || hasWarning || submitting}
+              className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 hover:shadow-xl hover:shadow-blue-500/25 hover:-translate-y-0.5 disabled:opacity-50 text-white font-semibold text-sm py-3 rounded-xl shadow-lg shadow-blue-500/20 transition-all active:scale-[0.98]"
+            >
               {submitting ? "Posting to Slack..." : "Assign Task"}
             </button>
           </div>
@@ -657,7 +818,7 @@ export default function DashboardClient({ initialTasks, userEmail }: {
         {/* Header */}
         <div className="flex items-center justify-between mb-8 gap-3 flex-wrap">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-xl shadow-lg shadow-blue-500/30">📋</div>
+            <AppLogo size="md" />
             <div>
               <h1 className="text-2xl font-bold tracking-tight bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent">Task Tracker</h1>
               <p className="text-slate-500 text-xs">

@@ -85,8 +85,12 @@ function LoginForm() {
       <div className="relative w-full max-w-md anim-pop">
         {/* Logo */}
         <div className="flex flex-col items-center mb-8">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-3xl shadow-2xl shadow-blue-500/40 mb-4 ring-1 ring-blue-400/20">
-            📋
+          <div className="w-16 h-16 rounded-2xl flex items-center justify-center shadow-2xl shadow-blue-500/40 mb-4 ring-1 ring-blue-400/20"
+            style={{ background: "linear-gradient(135deg, #1d4ed8 0%, #3b82f6 50%, #60a5fa 100%)" }}>
+            <svg className="w-8 h-8 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 11l3 3L22 4" />
+              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+            </svg>
           </div>
           <h1 className="text-2xl font-bold tracking-tight bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent">Task Tracker</h1>
           <p className="text-slate-500 text-sm mt-1">Internal Access Only</p>
