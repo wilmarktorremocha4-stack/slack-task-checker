@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { waitUntil } from "@vercel/functions";
 import { verifySlackSignature, getSlackUserName, postThreadReply, getSlackClient } from "@/lib/slack";
 import { createSupabaseAdmin } from "@/lib/supabase";
 import { parseTaskFromMessage } from "@/lib/openai-messages";
@@ -37,9 +38,11 @@ export async function POST(request: Request) {
     channel_match: event.channel === process.env.SLACK_CHANNEL_ID,
   }));
 
-  // Process asynchronously — do not await
-  processSlackEvent(event).catch(err =>
-    console.error("[slack] event processing error:", err)
+  // waitUntil keeps the Vercel function alive until processing completes
+  waitUntil(
+    processSlackEvent(event).catch(err =>
+      console.error("[slack] event processing error:", err)
+    )
   );
 
   return NextResponse.json({ ok: true });
