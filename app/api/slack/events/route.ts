@@ -23,12 +23,23 @@ export async function POST(request: Request) {
 
   const event = body.event;
   if (!event) {
+    console.log("[slack] no event in body, body.type:", body.type);
     return NextResponse.json({ ok: true });
   }
 
+  console.log("[slack] event received:", JSON.stringify({
+    type: event.type,
+    channel: event.channel,
+    thread_ts: event.thread_ts,
+    bot_id: event.bot_id,
+    subtype: event.subtype,
+    configured_channel: process.env.SLACK_CHANNEL_ID,
+    channel_match: event.channel === process.env.SLACK_CHANNEL_ID,
+  }));
+
   // Process asynchronously — do not await
   processSlackEvent(event).catch(err =>
-    console.error("Event processing error:", err)
+    console.error("[slack] event processing error:", err)
   );
 
   return NextResponse.json({ ok: true });
@@ -39,11 +50,14 @@ async function processSlackEvent(event: Record<string, unknown>) {
   const monitoredChannelId = process.env.SLACK_CHANNEL_ID!;
   const brandonUserId = process.env.SLACK_BRANDON_USER_ID!;
 
-  if (
-    event.type === "app_mention" &&
-    event.channel === monitoredChannelId &&
-    !event.thread_ts
-  ) {
+  const isMention = event.type === "app_mention";
+  const channelMatch = event.channel === monitoredChannelId;
+  const noThread = !event.thread_ts;
+
+  console.log("[slack] processing — isMention:", isMention, "channelMatch:", channelMatch, "noThread:", noThread);
+
+  if (isMention && channelMatch && noThread) {
+    console.log("[slack] → handling new task mention");
     await handleNewTaskMention(event, supabase, brandonUserId);
     return;
   }
@@ -54,9 +68,12 @@ async function processSlackEvent(event: Record<string, unknown>) {
     event.thread_ts !== event.ts &&
     !event.bot_id
   ) {
+    console.log("[slack] → handling thread reply");
     await handleThreadReply(event, supabase);
     return;
   }
+
+  console.log("[slack] → no handler matched for event type:", event.type);
 }
 
 async function handleNewTaskMention(
