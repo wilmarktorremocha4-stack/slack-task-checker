@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdmin } from "@/lib/supabase";
-import { postThreadReply } from "@/lib/slack";
+import { postThreadReply, slackMention } from "@/lib/slack";
 import { calculateNextFollowupAt } from "@/lib/followup-schedule";
+import { sendFollowupForTask } from "@/lib/followup-engine";
 
 export const runtime = "nodejs";
+export const maxDuration = 30;
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -24,11 +26,13 @@ export async function GET(_req: Request, { params }: RouteContext) {
   return NextResponse.json({ task });
 }
 
-// PATCH — approve or cancel a task
+// PATCH — approve, cancel, or push an immediate follow-up
 export async function PATCH(request: Request, { params }: RouteContext) {
   const { id } = await params;
   const supabase = createSupabaseAdmin();
-  const { action } = (await request.json()) as { action: "approve" | "cancel" };
+  const { action } = (await request.json()) as {
+    action: "approve" | "cancel" | "followup_now";
+  };
 
   const { data: task } = await supabase
     .from("tasks")
@@ -41,6 +45,10 @@ export async function PATCH(request: Request, { params }: RouteContext) {
   }
 
   if (action === "approve") {
+    if (task.status === "completed" || task.status === "cancelled") {
+      return NextResponse.json({ error: "Task is already closed" }, { status: 409 });
+    }
+
     await supabase
       .from("tasks")
       .update({ status: "completed", completed_at: new Date().toISOString(), next_followup_at: null })
@@ -49,17 +57,21 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     await postThreadReply(
       task.channel_id,
       task.thread_ts,
-      `✅ Brandon reviewed and approved this task. Well done ${task.assigned_to_name}!`
+      `✅ ${slackMention(task.assigned_to_id)} ${task.assigned_by_name} reviewed and approved this task. Well done!`
     );
 
     await supabase.from("task_comments").insert({
       task_id: id,
       author_type: "system",
       author_name: "System",
-      content: "Task approved and marked complete by Brandon.",
+      content: `Task approved and closed by ${task.assigned_by_name}.`,
       sent_to_slack: true,
     });
   } else if (action === "cancel") {
+    if (task.status === "completed" || task.status === "cancelled") {
+      return NextResponse.json({ error: "Task is already closed" }, { status: 409 });
+    }
+
     await supabase
       .from("tasks")
       .update({ status: "cancelled", next_followup_at: null })
@@ -68,16 +80,31 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     await postThreadReply(
       task.channel_id,
       task.thread_ts,
-      `This task has been cancelled by Brandon.`
+      `${slackMention(task.assigned_to_id)} this task has been cancelled by ${task.assigned_by_name}. No further action needed.`
     );
 
     await supabase.from("task_comments").insert({
       task_id: id,
       author_type: "system",
       author_name: "System",
-      content: "Task cancelled by Brandon.",
+      content: `Task cancelled by ${task.assigned_by_name}.`,
       sent_to_slack: true,
     });
+  } else if (action === "followup_now") {
+    if (task.status !== "active" && task.status !== "revision_requested") {
+      return NextResponse.json(
+        { error: "Follow-ups can only be sent for open tasks" },
+        { status: 409 }
+      );
+    }
+
+    try {
+      const result = await sendFollowupForTask(supabase, task, { manual: true });
+      return NextResponse.json({ ok: true, result });
+    } catch (err) {
+      console.error(`[followup_now] failed for task ${id}:`, err);
+      return NextResponse.json({ error: "Failed to send follow-up to Slack" }, { status: 502 });
+    }
   } else {
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
   }
@@ -105,7 +132,28 @@ export async function POST(request: Request, { params }: RouteContext) {
     return NextResponse.json({ error: "Task not found" }, { status: 404 });
   }
 
+  if (task.status === "cancelled") {
+    return NextResponse.json({ error: "Task is cancelled" }, { status: 409 });
+  }
+
   const trimmed = content.trim();
+
+  // Real <@id> mention (notifies the assignee) + broadcast so the reply is
+  // also visible in the main channel, not buried inside the thread.
+  try {
+    await postThreadReply(
+      task.channel_id,
+      task.thread_ts,
+      `${slackMention(task.assigned_to_id)} ${task.assigned_by_name} reviewed your work and needs some changes:\n\n> ${trimmed}\n\nPlease address this and reply *"done"* in this thread when complete.`,
+      { broadcast: true }
+    );
+  } catch (err) {
+    console.error(`[revision] Slack post failed for task ${id}:`, err);
+    return NextResponse.json(
+      { error: "Could not deliver the revision to Slack — nothing was changed. Please try again." },
+      { status: 502 }
+    );
+  }
 
   await supabase.from("task_comments").insert({
     task_id: id,
@@ -114,12 +162,6 @@ export async function POST(request: Request, { params }: RouteContext) {
     content: trimmed,
     sent_to_slack: true,
   });
-
-  await postThreadReply(
-    task.channel_id,
-    task.thread_ts,
-    `Hey ${task.assigned_to_name}, ${task.assigned_by_name} has reviewed your work and has some feedback:\n\n> ${trimmed}\n\nPlease address this and reply *"done"* in this thread when complete.`
-  );
 
   const nextFollowupAt = calculateNextFollowupAt(0);
 

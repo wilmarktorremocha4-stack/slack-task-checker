@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Task Tracker",
-  description: "Slack-powered task management",
+  title: "Task Tracker — Operation AMZ",
+  description: "Slack task assignment, follow-ups, and review workflow",
 };
 
 export default function RootLayout({

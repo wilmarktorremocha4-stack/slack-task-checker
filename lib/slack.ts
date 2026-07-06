@@ -56,7 +56,8 @@ export async function getSlackUserName(userId: string): Promise<string> {
 export async function postThreadReply(
   channelId: string,
   threadTs: string,
-  text: string
+  text: string,
+  options?: { broadcast?: boolean }
 ): Promise<void> {
   const slack = getSlackClient();
   await slack.chat.postMessage({
@@ -64,7 +65,14 @@ export async function postThreadReply(
     thread_ts: threadTs,
     text,
     mrkdwn: true,
+    // Surfaces the reply in the main channel too, so it can't be missed
+    reply_broadcast: options?.broadcast ?? false,
   });
+}
+
+// Slack only notifies a user when the raw <@ID> syntax is used
+export function slackMention(userId: string): string {
+  return `<@${userId}>`;
 }
 
 export async function sendDirectMessage(
