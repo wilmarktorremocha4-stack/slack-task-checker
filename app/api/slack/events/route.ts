@@ -193,15 +193,16 @@ async function handleThreadReply(
 
   console.log("[reply] looking up task for thread_ts:", threadTs, "userId:", userId);
 
+  // Match tasks that are open (active or revision_requested)
   const { data: task } = await supabase
     .from("tasks")
     .select("*")
     .eq("thread_ts", threadTs)
-    .eq("status", "active")
+    .in("status", ["active", "revision_requested"])
     .single();
 
   if (!task) {
-    console.log("[reply] no active task found for this thread");
+    console.log("[reply] no open task found for this thread");
     return;
   }
 
@@ -219,33 +220,54 @@ async function handleThreadReply(
     await supabase
       .from("tasks")
       .update({
-        status: "completed",
-        completed_at: new Date().toISOString(),
+        status: "pending_review",
         next_followup_at: null,
       })
       .eq("id", task.id);
 
-    // Celebrate in the thread
     await postThreadReply(
       task.channel_id,
       task.thread_ts,
-      `🎉 Great work ${task.assigned_to_name}! Task marked as complete:\n> ${task.task_text}\n\nI'll stop the follow-ups. Nice one!`
+      `Got it ${task.assigned_to_name}! I've flagged this for ${task.assigned_by_name}'s review. Follow-ups are paused while they check your work.`
     );
 
-    // DM Brandon so he knows it's done
+    await supabase.from("task_comments").insert([
+      {
+        task_id: task.id,
+        author_type: "assignee",
+        author_name: task.assigned_to_name,
+        content: rawText,
+        sent_to_slack: false,
+      },
+      {
+        task_id: task.id,
+        author_type: "system",
+        author_name: "System",
+        content: `${task.assigned_to_name} marked this done. Pending ${task.assigned_by_name}'s review.`,
+        sent_to_slack: true,
+      },
+    ]);
+
     const brandonUserId = process.env.SLACK_BRANDON_USER_ID!;
     const { sendDirectMessage } = await import("@/lib/slack");
     await sendDirectMessage(
       brandonUserId,
-      `✅ *Task Completed*\n\n*Assignee:* ${task.assigned_to_name}\n*Task:* ${task.task_text}\n*Completed after:* ${task.followup_count} follow-up(s)\n\n${task.assigned_to_name} marked this done in the thread.`
+      `👀 *Task Ready for Review*\n\n*Assignee:* ${task.assigned_to_name}\n*Task:* ${task.task_text}\n*Follow-ups sent:* ${task.followup_count}\n\n${task.assigned_to_name} says it's done. Review and approve or send revisions from the dashboard.`
     );
 
-    console.log("[reply] task marked complete, Brandon notified:", task.id);
+    console.log("[reply] task flagged for review:", task.id);
     return;
   }
 
-  // Non-completion replies (e.g. "got it", "noted") — acknowledge but keep following up
-  if (isAssignee && messageText.length > 0) {
-    console.log("[reply] assignee replied but not done — no action, follow-ups continue");
+  // Log all other assignee replies for full thread visibility on the dashboard
+  if (isAssignee && rawText.length > 0) {
+    await supabase.from("task_comments").insert({
+      task_id: task.id,
+      author_type: "assignee",
+      author_name: task.assigned_to_name,
+      content: rawText,
+      sent_to_slack: false,
+    });
+    console.log("[reply] assignee reply logged, follow-ups continue");
   }
 }

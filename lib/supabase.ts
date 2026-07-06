@@ -19,7 +19,7 @@ export interface Task {
   channel_id: string;
   message_ts: string;
   thread_ts: string;
-  status: "active" | "completed" | "escalated" | "cancelled";
+  status: "active" | "pending_review" | "revision_requested" | "completed" | "escalated" | "cancelled";
   followup_count: number;
   max_followups: number;
   next_followup_at: string | null;
@@ -28,6 +28,16 @@ export interface Task {
   escalated_at: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface TaskComment {
+  id: string;
+  task_id: string;
+  author_type: "brandon" | "assignee" | "system";
+  author_name: string;
+  content: string;
+  sent_to_slack: boolean;
+  created_at: string;
 }
 
 export interface FollowupLog {

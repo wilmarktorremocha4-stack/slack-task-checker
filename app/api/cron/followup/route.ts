@@ -27,7 +27,7 @@ export async function GET(request: Request) {
   const { data: dueTasks, error } = await supabase
     .from("tasks")
     .select("*")
-    .eq("status", "active")
+    .in("status", ["active", "revision_requested"])
     .lte("next_followup_at", now.toISOString())
     .not("next_followup_at", "is", null);
 
