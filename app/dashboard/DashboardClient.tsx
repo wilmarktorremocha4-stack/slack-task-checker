@@ -54,6 +54,17 @@ const FILTERS = [
   { key: "cancelled",          label: "Cancelled" },
 ];
 
+// Per-tab color styles for inactive state
+const FILTER_COLORS: Record<string, { tab: string; badge: string }> = {
+  all:                 { tab: "bg-white border-slate-300 text-slate-600 hover:bg-slate-50 hover:border-slate-400",          badge: "bg-slate-100 text-slate-500" },
+  pending_review:      { tab: "bg-amber-50 border-amber-300 text-amber-700 hover:bg-amber-100 hover:border-amber-400",       badge: "bg-amber-100 text-amber-600" },
+  active:              { tab: "bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100 hover:border-blue-400",            badge: "bg-blue-100 text-blue-600" },
+  revision_requested:  { tab: "bg-orange-50 border-orange-300 text-orange-700 hover:bg-orange-100 hover:border-orange-400", badge: "bg-orange-100 text-orange-600" },
+  completed:           { tab: "bg-emerald-50 border-emerald-300 text-emerald-700 hover:bg-emerald-100 hover:border-emerald-400", badge: "bg-emerald-100 text-emerald-600" },
+  escalated:           { tab: "bg-rose-50 border-rose-300 text-rose-700 hover:bg-rose-100 hover:border-rose-400",            badge: "bg-rose-100 text-rose-600" },
+  cancelled:           { tab: "bg-slate-50 border-slate-300 text-slate-500 hover:bg-slate-100 hover:border-slate-400",      badge: "bg-slate-100 text-slate-400" },
+};
+
 function timeAgo(d: string) {
   const s = (Date.now() - new Date(d).getTime()) / 1000;
   if (s < 60) return "just now";
@@ -293,6 +304,9 @@ function TaskCard({ task, expanded, onToggle, onAction, userMap, accentColor }: 
     (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
   );
   const followupsLeft = task.max_followups - task.followup_count;
+  const assigneeComments = (task.task_comments ?? []).filter(c => c.author_type === "assignee");
+  const replyCount = assigneeComments.length;
+  const replyAuthors = [...new Set(assigneeComments.map(c => c.author_name))];
 
   return (
     <div
@@ -327,6 +341,12 @@ function TaskCard({ task, expanded, onToggle, onAction, userMap, accentColor }: 
               {cfg.label}
             </span>
             {isPendingReview && <span className="text-xs font-medium text-amber-600">Awaiting your review</span>}
+            {replyCount > 0 && (
+              <span className="inline-flex items-center gap-1 text-xs font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full">
+                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
+                {replyCount} {replyCount === 1 ? "reply" : "replies"} from {replyAuthors.join(", ")}
+              </span>
+            )}
           </div>
           <p className="font-semibold text-slate-900 leading-snug">{task.task_text}</p>
           <p className="text-sm text-slate-500 mt-1 flex items-center gap-1.5 flex-wrap">
@@ -520,29 +540,29 @@ function EmployeeView({ tasks, sortBy, expandedId, onToggle, onAction, userMap }
                 </div>
               </div>
 
-              {/* Productivity metrics */}
+              {/* Productivity metrics — pastel color-coded cards */}
               <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="bg-white rounded-xl px-3 py-2.5 border border-slate-200 shadow-sm">
-                  <p className="text-slate-400 text-xs mb-0.5">Completion Rate</p>
-                  <p className="text-slate-900 font-bold text-lg leading-none">{completionRate}%</p>
-                  <div className="mt-2 h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                <div className="bg-blue-50 rounded-xl px-3 py-2.5 border border-blue-200 shadow-sm">
+                  <p className="text-blue-500 text-xs mb-0.5 font-medium">Completion Rate</p>
+                  <p className="text-blue-900 font-bold text-lg leading-none">{completionRate}%</p>
+                  <div className="mt-2 h-1.5 rounded-full bg-blue-100 overflow-hidden">
                     <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(completionRate, 100)}%`, backgroundColor: color }} />
                   </div>
                 </div>
-                <div className="bg-white rounded-xl px-3 py-2.5 border border-slate-200 shadow-sm">
-                  <p className="text-slate-400 text-xs mb-0.5">Open Tasks</p>
-                  <p className="text-slate-900 font-bold text-lg leading-none">{openTasks}</p>
-                  <p className="text-slate-400 text-xs mt-1">of {total} total</p>
+                <div className="bg-amber-50 rounded-xl px-3 py-2.5 border border-amber-200 shadow-sm">
+                  <p className="text-amber-500 text-xs mb-0.5 font-medium">Open Tasks</p>
+                  <p className="text-amber-900 font-bold text-lg leading-none">{openTasks}</p>
+                  <p className="text-amber-500 text-xs mt-1">of {total} total</p>
                 </div>
-                <div className="bg-white rounded-xl px-3 py-2.5 border border-slate-200 shadow-sm">
-                  <p className="text-slate-400 text-xs mb-0.5">Avg Follow-ups</p>
-                  <p className="text-slate-900 font-bold text-lg leading-none">{avgFollowups}</p>
-                  <p className="text-slate-400 text-xs mt-1">per completed task</p>
+                <div className="bg-violet-50 rounded-xl px-3 py-2.5 border border-violet-200 shadow-sm">
+                  <p className="text-violet-500 text-xs mb-0.5 font-medium">Avg Follow-ups</p>
+                  <p className="text-violet-900 font-bold text-lg leading-none">{avgFollowups}</p>
+                  <p className="text-violet-500 text-xs mt-1">per completed task</p>
                 </div>
-                <div className="bg-white rounded-xl px-3 py-2.5 border border-slate-200 shadow-sm">
-                  <p className="text-slate-400 text-xs mb-0.5">Completed</p>
-                  <p className="text-slate-900 font-bold text-lg leading-none">{done}</p>
-                  <p className="text-slate-400 text-xs mt-1">{escalated > 0 ? `${escalated} escalated` : "no escalations"}</p>
+                <div className="bg-emerald-50 rounded-xl px-3 py-2.5 border border-emerald-200 shadow-sm">
+                  <p className="text-emerald-500 text-xs mb-0.5 font-medium">Completed</p>
+                  <p className="text-emerald-900 font-bold text-lg leading-none">{done}</p>
+                  <p className="text-emerald-500 text-xs mt-1">{escalated > 0 ? `${escalated} escalated` : "no escalations"}</p>
                 </div>
               </div>
             </div>
@@ -1007,30 +1027,34 @@ export default function DashboardClient({ initialTasks, userEmail }: {
           ))}
         </div>
 
-        {/* Filter tabs — solid white pills, no scrollbar */}
+        {/* Filter tabs — color-coded per status */}
         {!isEmployeeView && (
           <div className="flex gap-1.5 mb-4 flex-wrap">
-            {FILTERS.map(f => (
-              <button
-                key={f.key}
-                onClick={() => { setFilter(f.key); if (f.key === "all") setSortBy("status"); }}
-                className={`shrink-0 px-3.5 py-1.5 rounded-xl text-sm font-medium transition-all flex items-center gap-1.5 shadow-md ${
-                  filter === f.key
-                    ? "bg-blue-600 border border-blue-500 text-white shadow-blue-900/30"
-                    : "bg-white/95 border border-white text-slate-600 hover:bg-white hover:text-slate-900"
-                }`}
-              >
-                {f.label}
-                {counts[f.key] > 0 && (
-                  <span className={`text-xs px-1.5 py-0.5 rounded-full ${filter === f.key ? "bg-white/25 text-white" : "bg-slate-100 text-slate-500"}`}>
-                    {counts[f.key]}
-                  </span>
-                )}
-                {f.key === "pending_review" && counts.pending_review > 0 && (
-                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-                )}
-              </button>
-            ))}
+            {FILTERS.map(f => {
+              const fc = FILTER_COLORS[f.key] ?? FILTER_COLORS.all;
+              const isActive = filter === f.key;
+              return (
+                <button
+                  key={f.key}
+                  onClick={() => { setFilter(f.key); if (f.key === "all") setSortBy("status"); }}
+                  className={`shrink-0 px-3.5 py-1.5 rounded-xl text-sm font-medium transition-all flex items-center gap-1.5 shadow-md border ${
+                    isActive
+                      ? "bg-blue-600 border-blue-500 text-white shadow-blue-900/30"
+                      : fc.tab
+                  }`}
+                >
+                  {f.label}
+                  {counts[f.key] > 0 && (
+                    <span className={`text-xs px-1.5 py-0.5 rounded-full ${isActive ? "bg-white/25 text-white" : fc.badge}`}>
+                      {counts[f.key]}
+                    </span>
+                  )}
+                  {f.key === "pending_review" && counts.pending_review > 0 && (
+                    <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                  )}
+                </button>
+              );
+            })}
           </div>
         )}
 
