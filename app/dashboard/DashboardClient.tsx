@@ -332,7 +332,7 @@ function TaskCard({ task, expanded, onToggle, onAction, userMap, accentColor, la
       {confirm === "followup_now" && (
         <ConfirmDialog
           title="Send a follow-up right now?"
-          body={followupsLeft > 0 ? `This sends follow-up #${task.followup_count + 1} of ${task.max_followups} to ${assigneeDisplay} immediately.` : `All ${task.max_followups} follow-ups are used. Sending now will ESCALATE the task and DM Brandon.`}
+          body={followupsLeft > 0 ? `This sends follow-up #${task.followup_count + 1} of ${task.max_followups} to ${assigneeDisplay} immediately.` : `All ${task.max_followups} follow-ups are used. Sending now will ESCALATE the task and DM ${task.assigned_by_name}.`}
           confirmLabel={followupsLeft > 0 ? "Send follow-up" : "Escalate now"}
           danger={followupsLeft <= 0}
           onConfirm={() => handle("followup_now")}
