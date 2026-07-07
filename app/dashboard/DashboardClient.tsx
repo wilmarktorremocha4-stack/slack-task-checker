@@ -16,16 +16,16 @@ const GRADIENT_BG = "linear-gradient(180deg, #060d24 0%, #0d2f7a 28%, #1565c0 56
 
 // Deterministic per-employee color palette — stable across renders
 const EMP_PALETTE = [
-  "#34d399", // emerald
-  "#a78bfa", // violet
-  "#f472b6", // pink
-  "#fbbf24", // amber
-  "#22d3ee", // cyan
-  "#fb923c", // orange
-  "#2dd4bf", // teal
-  "#818cf8", // indigo
-  "#f87171", // red
-  "#4ade80", // green
+  "#10b981", // emerald
+  "#8b5cf6", // violet
+  "#ec4899", // pink
+  "#f59e0b", // amber
+  "#06b6d4", // cyan
+  "#f97316", // orange
+  "#14b8a6", // teal
+  "#6366f1", // indigo
+  "#ef4444", // red
+  "#22c55e", // green
 ];
 
 function getEmployeeColor(name: string): string {
@@ -35,17 +35,17 @@ function getEmployeeColor(name: string): string {
 }
 
 const STATUS = {
-  active:             { label: "Active",        badge: "bg-blue-400/20 text-blue-200 border-blue-400/30",       dot: "bg-blue-300" },
-  pending_review:     { label: "Needs Review",  badge: "bg-amber-400/20 text-amber-200 border-amber-400/30",    dot: "bg-amber-300" },
-  revision_requested: { label: "Revision Sent", badge: "bg-orange-400/20 text-orange-200 border-orange-400/30", dot: "bg-orange-300" },
-  completed:          { label: "Done",          badge: "bg-emerald-400/20 text-emerald-200 border-emerald-400/30", dot: "bg-emerald-300" },
-  escalated:          { label: "Escalated",     badge: "bg-rose-400/20 text-rose-200 border-rose-400/30",       dot: "bg-rose-300" },
-  cancelled:          { label: "Cancelled",     badge: "bg-white/10 text-white/50 border-white/20",             dot: "bg-white/40" },
+  active:             { label: "Active",        badge: "bg-blue-100 text-blue-700 border-blue-200",       dot: "bg-blue-500" },
+  pending_review:     { label: "Needs Review",  badge: "bg-amber-100 text-amber-700 border-amber-200",    dot: "bg-amber-500" },
+  revision_requested: { label: "Revision Sent", badge: "bg-orange-100 text-orange-700 border-orange-200", dot: "bg-orange-500" },
+  completed:          { label: "Done",          badge: "bg-emerald-100 text-emerald-700 border-emerald-200", dot: "bg-emerald-500" },
+  escalated:          { label: "Escalated",     badge: "bg-rose-100 text-rose-700 border-rose-200",       dot: "bg-rose-500" },
+  cancelled:          { label: "Cancelled",     badge: "bg-slate-100 text-slate-500 border-slate-200",    dot: "bg-slate-400" },
 } as const;
 
+// "By Employee" lives in the header button only — not in this tab row
 const FILTERS = [
   { key: "all",                label: "All" },
-  { key: "by_employee",        label: "By Employee" },
   { key: "pending_review",     label: "Needs Review" },
   { key: "active",             label: "Active" },
   { key: "revision_requested", label: "Revision Sent" },
@@ -118,11 +118,12 @@ function parseSlackContent(text: string, userMap: Record<string, string>): strin
     .replace(/<([^>]+)>/g, "$1");
 }
 
-// ── Glass card base style ────────────────────────────────────────────────────
+// ── Surface styles: solid light cards that stand out from the gradient bg ────
 
-const GLASS = "bg-white/[0.12] backdrop-blur-xl border border-white/20";
-const GLASS_HOVER = "hover:bg-white/[0.18] hover:border-white/30";
-const INPUT_CLS = "w-full bg-white/10 border border-white/20 rounded-xl px-4 py-2.5 text-sm text-white placeholder-white/35 hover:border-white/30 focus:outline-none focus:ring-2 focus:ring-white/25 focus:border-white/35 transition-all";
+const CARD = "bg-white border border-slate-200 shadow-xl shadow-black/10";
+const CARD_HOVER = "hover:shadow-2xl hover:shadow-black/15 hover:border-slate-300";
+const INPUT_CLS = "w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-800 placeholder-slate-400 hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition-all";
+const HEADER_BTN = "bg-white/95 border border-white hover:bg-white text-slate-700 shadow-lg";
 
 // ── Icons ───────────────────────────────────────────────────────────────────
 
@@ -154,9 +155,6 @@ function IconLogout() {
 function IconSend() {
   return <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m22 2-7 20-4-9-9-4Z" /><path d="M22 2 11 13" /></svg>;
 }
-function IconUser() {
-  return <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>;
-}
 function IconSpinner() {
   return (
     <svg className="w-4 h-4 anim-spin-slow" viewBox="0 0 24 24" fill="none">
@@ -176,8 +174,8 @@ function Toast({ toasts }: { toasts: ToastType[] }) {
   return (
     <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2 pointer-events-none">
       {toasts.map(t => (
-        <div key={t.id} className={`px-4 py-3 rounded-xl text-sm font-medium shadow-xl border backdrop-blur-xl ${
-          t.ok ? "bg-emerald-500/30 border-emerald-400/30 text-emerald-100" : "bg-rose-500/30 border-rose-400/30 text-rose-100"
+        <div key={t.id} className={`px-4 py-3 rounded-xl text-sm font-medium shadow-xl border ${
+          t.ok ? "bg-emerald-50 border-emerald-300 text-emerald-800" : "bg-rose-50 border-rose-300 text-rose-800"
         }`}>
           {t.ok ? "✓" : "✗"} {t.message}
         </div>
@@ -193,17 +191,17 @@ function ConfirmDialog({ title, body, confirmLabel, danger, onConfirm, onClose }
 }) {
   return createPortal(
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className={`${GLASS} rounded-2xl w-full max-w-sm shadow-2xl p-6 anim-pop`}>
-        <h3 className="text-base font-semibold text-white mb-2">{title}</h3>
-        <p className="text-sm text-white/65 mb-6 leading-relaxed">{body}</p>
+      <div className={`${CARD} rounded-2xl w-full max-w-sm p-6 anim-pop`}>
+        <h3 className="text-base font-semibold text-slate-900 mb-2">{title}</h3>
+        <p className="text-sm text-slate-500 mb-6 leading-relaxed">{body}</p>
         <div className="flex gap-3">
-          <button onClick={onClose} className={`flex-1 ${GLASS} ${GLASS_HOVER} text-white/80 font-medium text-sm py-2.5 rounded-xl transition-all active:scale-[0.98]`}>
+          <button onClick={onClose} className="flex-1 bg-slate-100 border border-slate-200 hover:bg-slate-200 text-slate-700 font-medium text-sm py-2.5 rounded-xl transition-all active:scale-[0.98]">
             Keep as is
           </button>
           <button
             onClick={() => { onConfirm(); onClose(); }}
             className={`flex-1 font-semibold text-sm py-2.5 rounded-xl text-white transition-all active:scale-[0.98] shadow-lg ${
-              danger ? "bg-rose-500/40 hover:bg-rose-500/60 border border-rose-400/30" : "bg-blue-500/40 hover:bg-blue-500/60 border border-blue-400/30"
+              danger ? "bg-rose-600 hover:bg-rose-700 shadow-rose-500/25" : "bg-blue-600 hover:bg-blue-700 shadow-blue-500/25"
             }`}
           >
             {confirmLabel}
@@ -223,7 +221,7 @@ function CommentBubble({ c, userMap }: { c: TaskComment; userMap: Record<string,
   if (c.author_type === "system") {
     return (
       <div className="flex justify-center my-1">
-        <span className="text-xs text-white/45 italic px-3 py-1 bg-white/10 rounded-full text-center border border-white/15">
+        <span className="text-xs text-slate-500 italic px-3 py-1 bg-slate-100 rounded-full text-center border border-slate-200">
           {content} · {timeAgo(c.created_at)}
         </span>
       </div>
@@ -233,16 +231,16 @@ function CommentBubble({ c, userMap }: { c: TaskComment; userMap: Record<string,
   return (
     <div className={`flex gap-2 ${isBrandon ? "flex-row-reverse" : "flex-row"}`}>
       <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
-        isBrandon ? "bg-white/30 text-white" : "bg-white/15 text-white/80"
+        isBrandon ? "bg-blue-600 text-white" : "bg-slate-200 text-slate-600"
       }`}>
         {c.author_name.charAt(0).toUpperCase()}
       </div>
       <div className={`max-w-[75%] ${isBrandon ? "items-end" : "items-start"} flex flex-col`}>
-        <span className="text-xs text-white/45 mb-1 px-1">{c.author_name} · {timeAgo(c.created_at)}</span>
+        <span className="text-xs text-slate-400 mb-1 px-1">{c.author_name} · {timeAgo(c.created_at)}</span>
         <div className={`px-3.5 py-2 rounded-2xl text-sm leading-relaxed ${
           isBrandon
-            ? "bg-white/25 border border-white/30 text-white rounded-tr-sm"
-            : "bg-white/10 border border-white/15 text-white/90 rounded-tl-sm"
+            ? "bg-blue-600 text-white rounded-tr-sm shadow-md shadow-blue-500/20"
+            : "bg-slate-100 border border-slate-200 text-slate-700 rounded-tl-sm"
         }`}>
           {content}
         </div>
@@ -298,12 +296,10 @@ function TaskCard({ task, expanded, onToggle, onAction, userMap, accentColor }: 
 
   return (
     <div
-      className={`rounded-2xl border transition-all duration-200 ${GLASS} ${
-        isPendingReview
-          ? "border-amber-400/40 shadow-lg shadow-amber-500/10 ring-1 ring-amber-400/20"
-          : `${GLASS_HOVER} hover:shadow-lg hover:shadow-black/20`
+      className={`rounded-2xl transition-all duration-200 ${CARD} ${CARD_HOVER} ${
+        isPendingReview ? "ring-2 ring-amber-400/60 border-amber-300" : ""
       }`}
-      style={accentColor ? { borderLeft: `3px solid ${accentColor}80` } : undefined}
+      style={accentColor ? { borderLeft: `4px solid ${accentColor}` } : undefined}
     >
       {confirm === "cancel" && (
         <ConfirmDialog title="Cancel this task?" body={`${assigneeDisplay} will be notified in Slack that the task is cancelled, and all follow-ups will stop.`} confirmLabel="Yes, cancel task" danger onConfirm={() => handle("cancel")} onClose={() => setConfirm(null)} />
@@ -323,39 +319,39 @@ function TaskCard({ task, expanded, onToggle, onAction, userMap, accentColor }: 
       )}
 
       {/* Card header */}
-      <button onClick={onToggle} className="w-full text-left p-5 flex items-start gap-4 rounded-2xl transition-colors">
+      <button onClick={onToggle} className="w-full text-left p-5 flex items-start gap-4 rounded-2xl transition-colors hover:bg-slate-50/70">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1.5 flex-wrap">
             <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-0.5 rounded-full border ${cfg.badge}`}>
               <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot} ${isPendingReview ? "animate-pulse" : ""}`} />
               {cfg.label}
             </span>
-            {isPendingReview && <span className="text-xs font-medium text-amber-300">Awaiting your review</span>}
+            {isPendingReview && <span className="text-xs font-medium text-amber-600">Awaiting your review</span>}
           </div>
-          <p className="font-medium text-white leading-snug">{task.task_text}</p>
-          <p className="text-sm text-white/55 mt-1 flex items-center gap-1.5 flex-wrap">
+          <p className="font-semibold text-slate-900 leading-snug">{task.task_text}</p>
+          <p className="text-sm text-slate-500 mt-1 flex items-center gap-1.5 flex-wrap">
             {accentColor && <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: accentColor }} />}
-            <span className="text-white/85 font-medium">{assigneeDisplay}</span>
-            <span className="text-white/30">·</span>
+            <span className="text-slate-700 font-medium">{assigneeDisplay}</span>
+            <span className="text-slate-300">·</span>
             assigned by {task.assigned_by_name}
           </p>
-          <p className="text-xs text-white/35 mt-0.5">{formatDate(task.created_at)} · {timeAgo(task.created_at)}</p>
+          <p className="text-xs text-slate-400 mt-0.5">{formatDate(task.created_at)} · {timeAgo(task.created_at)}</p>
         </div>
 
         <div className="text-right shrink-0 flex flex-col items-end gap-1">
-          <span className="text-xs text-white/45">{task.followup_count}/{task.max_followups} follow-ups</span>
+          <span className="text-xs text-slate-400">{task.followup_count}/{task.max_followups} follow-ups</span>
           {next && (
-            <span className={`text-xs font-medium ${next.isOverdue ? "text-rose-300" : "text-blue-200"}`}>
+            <span className={`text-xs font-medium ${next.isOverdue ? "text-rose-600" : "text-blue-600"}`}>
               {next.label}
             </span>
           )}
           {task.status === "completed" && task.completed_at && (
-            <span className="text-xs text-emerald-300">Completed {timeAgo(task.completed_at)}</span>
+            <span className="text-xs text-emerald-600">Completed {timeAgo(task.completed_at)}</span>
           )}
           {task.status === "escalated" && task.escalated_at && (
-            <span className="text-xs text-rose-300">Escalated {timeAgo(task.escalated_at)}</span>
+            <span className="text-xs text-rose-600">Escalated {timeAgo(task.escalated_at)}</span>
           )}
-          <svg className={`w-4 h-4 text-white/35 mt-1 transition-transform ${expanded ? "rotate-180" : ""}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg className={`w-4 h-4 text-slate-400 mt-1 transition-transform ${expanded ? "rotate-180" : ""}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="m6 9 6 6 6-6" />
           </svg>
         </div>
@@ -363,16 +359,16 @@ function TaskCard({ task, expanded, onToggle, onAction, userMap, accentColor }: 
 
       {/* Expanded content */}
       {expanded && (
-        <div className="border-t border-white/15 px-5 pb-5 pt-4 anim-expand">
+        <div className="border-t border-slate-200 px-5 pb-5 pt-4 anim-expand">
           {/* Thread history */}
           <div className="mb-4">
-            <p className="text-xs text-white/40 font-medium uppercase tracking-wide mb-3">Thread Activity</p>
+            <p className="text-xs text-slate-400 font-semibold uppercase tracking-wide mb-3">Thread Activity</p>
             {sortedComments.length > 0 ? (
-              <div ref={threadRef} className="flex flex-col gap-3 max-h-72 overflow-y-auto pr-1 hide-scrollbar">
+              <div ref={threadRef} className="flex flex-col gap-3 max-h-72 overflow-y-auto pr-1 hide-scrollbar bg-slate-50 border border-slate-200 rounded-xl p-3">
                 {sortedComments.map(c => <CommentBubble key={c.id} c={c} userMap={userMap} />)}
               </div>
             ) : (
-              <p className="text-sm text-white/35 italic text-center py-4 bg-white/5 rounded-xl border border-white/10">
+              <p className="text-sm text-slate-400 italic text-center py-4 bg-slate-50 rounded-xl border border-slate-200">
                 No thread activity yet — Slack replies and actions will appear here.
               </p>
             )}
@@ -381,7 +377,7 @@ function TaskCard({ task, expanded, onToggle, onAction, userMap, accentColor }: 
           {/* pending_review actions */}
           {isPendingReview && (
             <div className="space-y-3">
-              <div className="flex items-center gap-2 text-sm text-amber-300 font-medium bg-amber-400/10 border border-amber-400/20 rounded-xl px-4 py-2.5">
+              <div className="flex items-center gap-2 text-sm text-amber-700 font-medium bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5">
                 <span>👀</span>
                 <span>{assigneeDisplay} says this is done. Approve it, or describe what needs revising.</span>
               </div>
@@ -393,14 +389,14 @@ function TaskCard({ task, expanded, onToggle, onAction, userMap, accentColor }: 
                 rows={3}
               />
               <div className="flex gap-3">
-                <button disabled={!!working} onClick={() => handle("approve")} className="flex-1 inline-flex items-center justify-center gap-2 bg-emerald-500/30 hover:bg-emerald-500/50 border border-emerald-400/30 hover:-translate-y-0.5 disabled:opacity-50 text-white font-semibold text-sm py-2.5 rounded-xl transition-all active:scale-[0.98]">
+                <button disabled={!!working} onClick={() => handle("approve")} className="flex-1 inline-flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 hover:-translate-y-0.5 disabled:opacity-50 text-white font-semibold text-sm py-2.5 rounded-xl shadow-lg shadow-emerald-500/25 transition-all active:scale-[0.98]">
                   <IconCheck /> {working === "approve" ? "Approving..." : "Approve & Close"}
                 </button>
-                <button disabled={!!working || !revisionText.trim()} onClick={() => handle("revision")} className="flex-1 inline-flex items-center justify-center gap-2 bg-orange-500/30 hover:bg-orange-500/50 border border-orange-400/30 hover:-translate-y-0.5 disabled:opacity-50 text-white font-semibold text-sm py-2.5 rounded-xl transition-all active:scale-[0.98]">
+                <button disabled={!!working || !revisionText.trim()} onClick={() => handle("revision")} className="flex-1 inline-flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 hover:-translate-y-0.5 disabled:opacity-50 text-white font-semibold text-sm py-2.5 rounded-xl shadow-lg shadow-orange-500/25 transition-all active:scale-[0.98]">
                   <IconEdit /> {working === "revision" ? "Sending..." : "Request Revision"}
                 </button>
               </div>
-              <button disabled={!!working} onClick={() => setConfirm("cancel")} className="w-full inline-flex items-center justify-center gap-2 bg-rose-500/15 border border-rose-400/25 hover:bg-rose-500/25 text-rose-300 font-medium text-sm py-2.5 rounded-xl transition-all disabled:opacity-50 active:scale-[0.98]">
+              <button disabled={!!working} onClick={() => setConfirm("cancel")} className="w-full inline-flex items-center justify-center gap-2 bg-white border border-rose-300 hover:bg-rose-50 text-rose-600 font-medium text-sm py-2.5 rounded-xl transition-all disabled:opacity-50 active:scale-[0.98]">
                 <IconTrash /> Cancel Task
               </button>
             </div>
@@ -410,16 +406,16 @@ function TaskCard({ task, expanded, onToggle, onAction, userMap, accentColor }: 
           {isOpen && (
             <div className="space-y-3">
               <div className="flex gap-3">
-                <button disabled={!!working} onClick={() => setConfirm("followup_now")} className="flex-1 inline-flex items-center justify-center gap-2 bg-white/20 hover:bg-white/30 border border-white/25 hover:-translate-y-0.5 disabled:opacity-50 text-white font-semibold text-sm py-2.5 rounded-xl transition-all active:scale-[0.98]">
+                <button disabled={!!working} onClick={() => setConfirm("followup_now")} className="flex-1 inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 hover:-translate-y-0.5 disabled:opacity-50 text-white font-semibold text-sm py-2.5 rounded-xl shadow-lg shadow-blue-500/25 transition-all active:scale-[0.98]">
                   <IconBolt /> {working === "followup_now" ? "Sending..." : "Send Follow-up Now"}
                 </button>
-                <button disabled={!!working} onClick={() => setConfirm("cancel")} className="flex-1 inline-flex items-center justify-center gap-2 bg-rose-500/15 border border-rose-400/25 hover:bg-rose-500/25 text-rose-300 font-medium text-sm py-2.5 rounded-xl transition-all disabled:opacity-50 active:scale-[0.98]">
+                <button disabled={!!working} onClick={() => setConfirm("cancel")} className="flex-1 inline-flex items-center justify-center gap-2 bg-white border border-rose-300 hover:bg-rose-50 text-rose-600 font-medium text-sm py-2.5 rounded-xl transition-all disabled:opacity-50 active:scale-[0.98]">
                   <IconTrash /> {working === "cancel" ? "Cancelling..." : "Cancel Task"}
                 </button>
               </div>
 
               {isActive && (
-                <div className="pt-3 border-t border-white/10">
+                <div className="pt-3 border-t border-slate-200">
                   <div className="flex gap-2">
                     <input
                       type="text"
@@ -432,7 +428,7 @@ function TaskCard({ task, expanded, onToggle, onAction, userMap, accentColor }: 
                     <button
                       disabled={!!working || !messageText.trim()}
                       onClick={() => handle("message")}
-                      className="inline-flex items-center gap-2 bg-white/20 hover:bg-white/30 border border-white/25 hover:-translate-y-0.5 disabled:opacity-40 text-white font-semibold text-sm px-4 py-2 rounded-xl transition-all active:scale-[0.98]"
+                      className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 hover:-translate-y-0.5 disabled:opacity-40 text-white font-semibold text-sm px-4 py-2 rounded-xl shadow-md shadow-blue-500/20 transition-all active:scale-[0.98]"
                     >
                       {working === "message" ? <IconSpinner /> : <IconSend />}
                     </button>
@@ -444,22 +440,12 @@ function TaskCard({ task, expanded, onToggle, onAction, userMap, accentColor }: 
 
           {/* Closed task actions */}
           {isClosed && (
-            <button disabled={!!working} onClick={() => setConfirm("reopen")} className={`w-full inline-flex items-center justify-center gap-2 ${GLASS} ${GLASS_HOVER} text-white/80 font-medium text-sm py-2.5 rounded-xl transition-all disabled:opacity-50 active:scale-[0.98]`}>
+            <button disabled={!!working} onClick={() => setConfirm("reopen")} className="w-full inline-flex items-center justify-center gap-2 bg-white border border-blue-300 hover:bg-blue-50 text-blue-600 font-medium text-sm py-2.5 rounded-xl transition-all disabled:opacity-50 active:scale-[0.98]">
               <IconRefresh spinning={working === "reopen"} /> {working === "reopen" ? "Reopening..." : "Reopen Task"}
             </button>
           )}
         </div>
       )}
-    </div>
-  );
-}
-
-// ── Productivity bar ─────────────────────────────────────────────────────────
-
-function ProdBar({ pct, color }: { pct: number; color: string }) {
-  return (
-    <div className="h-1.5 rounded-full bg-white/15 overflow-hidden">
-      <div className={`h-full rounded-full ${color} transition-all`} style={{ width: `${Math.min(pct, 100)}%` }} />
     </div>
   );
 }
@@ -479,7 +465,7 @@ function EmployeeView({ tasks, sortBy, expandedId, onToggle, onAction, userMap }
 
   if (employees.length === 0) {
     return (
-      <div className={`text-center text-white/50 py-16 ${GLASS} rounded-2xl`}>
+      <div className={`text-center text-slate-500 py-16 ${CARD} rounded-2xl`}>
         No tasks assigned yet.
       </div>
     );
@@ -504,65 +490,65 @@ function EmployeeView({ tasks, sortBy, expandedId, onToggle, onAction, userMap }
         const openTasks = active + pending + revision;
 
         return (
-          <div key={name} className={`rounded-2xl border ${GLASS} overflow-hidden`}
-            style={{ borderColor: color + "50", borderLeftWidth: "4px", borderLeftColor: color }}>
+          <div key={name} className={`rounded-2xl ${CARD} overflow-hidden`}
+            style={{ borderLeft: `5px solid ${color}` }}>
             {/* Employee header */}
-            <div className="px-5 py-4 border-b border-white/15" style={{ background: color + "12" }}>
+            <div className="px-5 py-4 border-b border-slate-200" style={{ background: color + "0d" }}>
               <div className="flex items-start justify-between gap-4 flex-wrap">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full border-2 flex items-center justify-center font-bold text-white text-base shadow-lg"
-                    style={{ background: color + "40", borderColor: color + "70" }}>
+                  <div className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-white text-base shadow-md"
+                    style={{ background: color }}>
                     {name.charAt(0).toUpperCase()}
                   </div>
                   <div>
-                    <h3 className="font-bold text-white text-base flex items-center gap-2">
+                    <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
                       {name}
                       <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: color }} />
                     </h3>
-                    <p className="text-xs text-white/50">{total} task{total !== 1 ? "s" : ""} total</p>
+                    <p className="text-xs text-slate-500">{total} task{total !== 1 ? "s" : ""} total</p>
                   </div>
                 </div>
 
                 {/* Status pill row */}
                 <div className="flex gap-2 text-xs flex-wrap">
-                  {active > 0    && <span className="px-2.5 py-1 rounded-full bg-blue-400/20 text-blue-200 border border-blue-400/25">{active} active</span>}
-                  {pending > 0   && <span className="px-2.5 py-1 rounded-full bg-amber-400/20 text-amber-200 border border-amber-400/25">{pending} review</span>}
-                  {revision > 0  && <span className="px-2.5 py-1 rounded-full bg-orange-400/20 text-orange-200 border border-orange-400/25">{revision} revision</span>}
-                  {done > 0      && <span className="px-2.5 py-1 rounded-full bg-emerald-400/20 text-emerald-200 border border-emerald-400/25">{done} done</span>}
-                  {escalated > 0 && <span className="px-2.5 py-1 rounded-full bg-rose-400/20 text-rose-200 border border-rose-400/25">{escalated} escalated</span>}
-                  {cancelled > 0 && <span className="px-2.5 py-1 rounded-full bg-white/10 text-white/50 border border-white/15">{cancelled} cancelled</span>}
+                  {active > 0    && <span className="px-2.5 py-1 rounded-full bg-blue-100 text-blue-700 border border-blue-200">{active} active</span>}
+                  {pending > 0   && <span className="px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 border border-amber-200">{pending} review</span>}
+                  {revision > 0  && <span className="px-2.5 py-1 rounded-full bg-orange-100 text-orange-700 border border-orange-200">{revision} revision</span>}
+                  {done > 0      && <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">{done} done</span>}
+                  {escalated > 0 && <span className="px-2.5 py-1 rounded-full bg-rose-100 text-rose-700 border border-rose-200">{escalated} escalated</span>}
+                  {cancelled > 0 && <span className="px-2.5 py-1 rounded-full bg-slate-100 text-slate-500 border border-slate-200">{cancelled} cancelled</span>}
                 </div>
               </div>
 
               {/* Productivity metrics */}
               <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="bg-white/[0.08] rounded-xl px-3 py-2.5 border border-white/10">
-                  <p className="text-white/40 text-xs mb-0.5">Completion Rate</p>
-                  <p className="text-white font-bold text-lg leading-none">{completionRate}%</p>
-                  <div className="mt-2 h-1.5 rounded-full bg-white/15 overflow-hidden">
+                <div className="bg-white rounded-xl px-3 py-2.5 border border-slate-200 shadow-sm">
+                  <p className="text-slate-400 text-xs mb-0.5">Completion Rate</p>
+                  <p className="text-slate-900 font-bold text-lg leading-none">{completionRate}%</p>
+                  <div className="mt-2 h-1.5 rounded-full bg-slate-100 overflow-hidden">
                     <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(completionRate, 100)}%`, backgroundColor: color }} />
                   </div>
                 </div>
-                <div className="bg-white/[0.08] rounded-xl px-3 py-2.5 border border-white/10">
-                  <p className="text-white/40 text-xs mb-0.5">Open Tasks</p>
-                  <p className="text-white font-bold text-lg leading-none">{openTasks}</p>
-                  <p className="text-white/35 text-xs mt-1">of {total} total</p>
+                <div className="bg-white rounded-xl px-3 py-2.5 border border-slate-200 shadow-sm">
+                  <p className="text-slate-400 text-xs mb-0.5">Open Tasks</p>
+                  <p className="text-slate-900 font-bold text-lg leading-none">{openTasks}</p>
+                  <p className="text-slate-400 text-xs mt-1">of {total} total</p>
                 </div>
-                <div className="bg-white/[0.08] rounded-xl px-3 py-2.5 border border-white/10">
-                  <p className="text-white/40 text-xs mb-0.5">Avg Follow-ups</p>
-                  <p className="text-white font-bold text-lg leading-none">{avgFollowups}</p>
-                  <p className="text-white/35 text-xs mt-1">per completed task</p>
+                <div className="bg-white rounded-xl px-3 py-2.5 border border-slate-200 shadow-sm">
+                  <p className="text-slate-400 text-xs mb-0.5">Avg Follow-ups</p>
+                  <p className="text-slate-900 font-bold text-lg leading-none">{avgFollowups}</p>
+                  <p className="text-slate-400 text-xs mt-1">per completed task</p>
                 </div>
-                <div className="bg-white/[0.08] rounded-xl px-3 py-2.5 border border-white/10">
-                  <p className="text-white/40 text-xs mb-0.5">Completed</p>
-                  <p className="text-white font-bold text-lg leading-none">{done}</p>
-                  <p className="text-white/35 text-xs mt-1">{escalated > 0 ? `${escalated} escalated` : "no escalations"}</p>
+                <div className="bg-white rounded-xl px-3 py-2.5 border border-slate-200 shadow-sm">
+                  <p className="text-slate-400 text-xs mb-0.5">Completed</p>
+                  <p className="text-slate-900 font-bold text-lg leading-none">{done}</p>
+                  <p className="text-slate-400 text-xs mt-1">{escalated > 0 ? `${escalated} escalated` : "no escalations"}</p>
                 </div>
               </div>
             </div>
 
             {/* Task list — each card gets the employee accent color */}
-            <div className="p-4 space-y-2">
+            <div className="p-4 space-y-2 bg-slate-50/60">
               {applySort(empTasks, sortBy).map(task => (
                 <TaskCard key={task.id} task={task} expanded={expandedId === task.id} onToggle={() => onToggle(task.id)} onAction={onAction} userMap={userMap} accentColor={color} />
               ))}
@@ -611,9 +597,7 @@ function NewTaskModal({ onClose, onCreated, toast, initialUsers }: {
   }
 
   const dueMs = dueDateMode === "custom" && dueDateVal ? new Date(dueDateVal).getTime() : null;
-  // Warn if any followup is after due date
   const afterDueWarnings = followups.map(f => !f || !dueMs ? false : new Date(f).getTime() > dueMs);
-  // Warn if followups are out of chronological order
   const outOfOrderWarnings = followups.map((f, i) => {
     if (!f || i === 0) return false;
     const prev = followups[i - 1];
@@ -646,17 +630,17 @@ function NewTaskModal({ onClose, onCreated, toast, initialUsers }: {
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 flex items-start justify-center p-4 overflow-y-auto">
-      <div className={`${GLASS} rounded-3xl w-full max-w-lg shadow-2xl anim-pop my-4`}>
-        <div className="flex items-center justify-between p-6 border-b border-white/15">
-          <h2 className="text-lg font-semibold text-white">Assign New Task</h2>
-          <button onClick={onClose} className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white/70 flex items-center justify-center transition-all hover:rotate-90 duration-200">
+      <div className={`${CARD} rounded-3xl w-full max-w-lg anim-pop my-4`}>
+        <div className="flex items-center justify-between p-6 border-b border-slate-200">
+          <h2 className="text-lg font-semibold text-slate-900">Assign New Task</h2>
+          <button onClick={onClose} className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-all hover:rotate-90 duration-200">
             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
           </button>
         </div>
         <form onSubmit={submit} className="p-6 space-y-5">
           {/* Assignees */}
           <div>
-            <label className="block text-sm font-medium text-white/70 mb-2">Assign to <span className="text-white/35">(select one or more)</span></label>
+            <label className="block text-sm font-medium text-slate-600 mb-2">Assign to <span className="text-slate-400">(select one or more)</span></label>
             <div className="space-y-2">
               <input type="text" placeholder="Search team members..." value={userSearch} onChange={e => setUserSearch(e.target.value)} className={INPUT_CLS} />
               {selectedIds.length > 0 && (
@@ -664,10 +648,11 @@ function NewTaskModal({ onClose, onCreated, toast, initialUsers }: {
                   {selectedIds.map(id => {
                     const u = users.find(u => u.id === id);
                     if (!u) return null;
+                    const c = getEmployeeColor(u.name);
                     return (
-                      <span key={id} className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/20 border border-white/25 text-white text-xs font-medium">
+                      <span key={id} className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold text-white shadow-sm" style={{ background: c }}>
                         {u.name}
-                        <button type="button" onClick={() => toggleUser(u)} className="text-white/60 hover:text-white transition-colors">
+                        <button type="button" onClick={() => toggleUser(u)} className="text-white/70 hover:text-white transition-colors">
                           <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
                         </button>
                       </span>
@@ -675,16 +660,19 @@ function NewTaskModal({ onClose, onCreated, toast, initialUsers }: {
                   })}
                 </div>
               )}
-              <div className="max-h-36 overflow-y-auto bg-white/5 border border-white/15 rounded-xl divide-y divide-white/10 hide-scrollbar">
-                {filteredUsers.length === 0 && <p className="text-sm text-white/40 p-3 text-center">No members found</p>}
+              <div className="max-h-36 overflow-y-auto bg-slate-50 border border-slate-200 rounded-xl divide-y divide-slate-200 hide-scrollbar">
+                {filteredUsers.length === 0 && <p className="text-sm text-slate-400 p-3 text-center">No members found</p>}
                 {filteredUsers.map(u => {
                   const sel = selectedIds.includes(u.id);
                   return (
                     <button key={u.id} type="button" onClick={() => toggleUser(u)}
-                      className={`w-full text-left px-4 py-2.5 text-sm flex items-center justify-between transition-colors ${sel ? "bg-white/15 text-white" : "text-white/65 hover:bg-white/10 hover:text-white"}`}
+                      className={`w-full text-left px-4 py-2.5 text-sm flex items-center justify-between transition-colors ${sel ? "bg-blue-50 text-blue-700 font-medium" : "text-slate-600 hover:bg-slate-100"}`}
                     >
-                      {u.name}
-                      {sel && <svg className="w-4 h-4 text-white shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>}
+                      <span className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: getEmployeeColor(u.name) }} />
+                        {u.name}
+                      </span>
+                      {sel && <svg className="w-4 h-4 text-blue-600 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>}
                     </button>
                   );
                 })}
@@ -694,7 +682,7 @@ function NewTaskModal({ onClose, onCreated, toast, initialUsers }: {
 
           {/* Task description */}
           <div>
-            <label className="block text-sm font-medium text-white/70 mb-2">Task description</label>
+            <label className="block text-sm font-medium text-slate-600 mb-2">Task description</label>
             <textarea required value={taskText} onChange={e => setTaskText(e.target.value)}
               placeholder="e.g. Prepare the supplier outreach plan by Friday"
               className={`${INPUT_CLS} resize-none`} rows={3} />
@@ -702,11 +690,11 @@ function NewTaskModal({ onClose, onCreated, toast, initialUsers }: {
 
           {/* Due date */}
           <div>
-            <label className="block text-sm font-medium text-white/70 mb-2">Due date</label>
+            <label className="block text-sm font-medium text-slate-600 mb-2">Due date</label>
             <div className="flex gap-2 mb-2">
               {(["open", "custom"] as const).map(m => (
                 <button key={m} type="button" onClick={() => setDueDateMode(m)}
-                  className={`px-4 py-1.5 rounded-lg text-sm font-medium border transition-all ${dueDateMode === m ? "bg-white/25 border-white/35 text-white" : "bg-white/5 border-white/15 text-white/55 hover:text-white/80"}`}
+                  className={`px-4 py-1.5 rounded-lg text-sm font-medium border transition-all ${dueDateMode === m ? "bg-blue-600 border-blue-600 text-white shadow-md shadow-blue-500/20" : "bg-white border-slate-200 text-slate-500 hover:border-slate-300 hover:text-slate-700"}`}
                 >
                   {m === "open" ? "Open (no due date)" : "Custom date"}
                 </button>
@@ -719,7 +707,7 @@ function NewTaskModal({ onClose, onCreated, toast, initialUsers }: {
 
           {/* Follow-up schedule */}
           <div>
-            <label className="block text-sm font-medium text-white/70 mb-2">Follow-up schedule</label>
+            <label className="block text-sm font-medium text-slate-600 mb-2">Follow-up schedule</label>
             <div className="space-y-2">
               {followups.map((f, i) => {
                 const isAfterDue = afterDueWarnings[i];
@@ -729,22 +717,22 @@ function NewTaskModal({ onClose, onCreated, toast, initialUsers }: {
                 return (
                   <div key={i} className="flex gap-2 items-end">
                     <div className="flex-1">
-                      <p className="text-xs text-white/40 mb-1 flex items-center gap-2">
+                      <p className="text-xs text-slate-400 mb-1 flex items-center gap-2">
                         <span>{ordinal} Follow-up</span>
-                        {isAfterDue && <span className="text-rose-300">⚠ After due date</span>}
-                        {isOutOfOrder && !isAfterDue && <span className="text-amber-300">⚠ Earlier than previous — will auto-sort on blur</span>}
+                        {isAfterDue && <span className="text-rose-500 font-medium">⚠ After due date</span>}
+                        {isOutOfOrder && !isAfterDue && <span className="text-amber-600 font-medium">⚠ Earlier than previous — will auto-sort</span>}
                       </p>
                       <input
                         type="datetime-local"
                         value={f}
                         onChange={e => setFollowupAt(i, e.target.value)}
                         onBlur={sortFollowups}
-                        className={`${INPUT_CLS} ${hasFieldWarning ? "border-rose-400/50" : ""}`}
+                        className={`${INPUT_CLS} ${hasFieldWarning ? "border-rose-400" : ""}`}
                       />
                     </div>
                     {followups.length > 1 && (
                       <button type="button" onClick={() => removeFollowup(i)}
-                        className="w-9 h-9 rounded-lg bg-rose-500/15 border border-rose-400/20 text-rose-300 hover:bg-rose-500/25 flex items-center justify-center transition-all shrink-0">
+                        className="w-9 h-9 rounded-lg bg-rose-50 border border-rose-200 text-rose-500 hover:bg-rose-100 flex items-center justify-center transition-all shrink-0">
                         <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
                       </button>
                     )}
@@ -752,18 +740,18 @@ function NewTaskModal({ onClose, onCreated, toast, initialUsers }: {
                 );
               })}
               <button type="button" onClick={addFollowup}
-                className="inline-flex items-center gap-1.5 text-xs text-white/65 hover:text-white bg-white/8 border border-white/15 hover:border-white/25 px-3 py-1.5 rounded-lg transition-all">
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 bg-blue-50 border border-blue-200 hover:border-blue-300 px-3 py-1.5 rounded-lg transition-all">
                 <IconPlus /> Add follow-up
               </button>
             </div>
           </div>
 
           <div className="flex gap-3 pt-1">
-            <button type="button" onClick={onClose} className={`flex-1 ${GLASS} ${GLASS_HOVER} text-white/80 font-medium text-sm py-3 rounded-xl transition-all active:scale-[0.98]`}>
+            <button type="button" onClick={onClose} className="flex-1 bg-slate-100 border border-slate-200 hover:bg-slate-200 text-slate-700 font-medium text-sm py-3 rounded-xl transition-all active:scale-[0.98]">
               Cancel
             </button>
             <button type="submit" disabled={!selectedIds.length || !taskText.trim() || filledFollowups.length === 0 || hasWarning || submitting}
-              className="flex-1 bg-white/20 hover:bg-white/30 border border-white/30 hover:border-white/45 hover:-translate-y-0.5 disabled:opacity-50 text-white font-semibold text-sm py-3 rounded-xl transition-all active:scale-[0.98]">
+              className="flex-1 bg-blue-600 hover:bg-blue-700 hover:-translate-y-0.5 disabled:opacity-50 text-white font-semibold text-sm py-3 rounded-xl shadow-lg shadow-blue-500/25 transition-all active:scale-[0.98]">
               {submitting ? "Posting to Slack..." : "Assign Task"}
             </button>
           </div>
@@ -883,9 +871,13 @@ export default function DashboardClient({ initialTasks, userEmail }: {
 
   const filteredTasks = filter === "all" || filter === "by_employee" ? tasks : tasks.filter(t => t.status === filter);
   const visible = applySort(filteredTasks, sortBy);
+  const isEmployeeView = filter === "by_employee";
 
   return (
-    <main className="min-h-screen text-white overflow-x-hidden" style={{ background: GRADIENT_BG }}>
+    <main className="min-h-screen relative text-white overflow-x-hidden">
+      {/* Fixed gradient background — stays put while the page scrolls */}
+      <div className="fixed inset-0 -z-10" style={{ background: GRADIENT_BG }} />
+
       <Toast toasts={toasts} />
       {newTaskOpen && (
         <NewTaskModal
@@ -900,103 +892,109 @@ export default function DashboardClient({ initialTasks, userEmail }: {
         {/* Header */}
         <div className="flex items-center justify-between mb-8 gap-3 flex-wrap">
           <div>
-            <h1 className="text-4xl font-black tracking-tight leading-none">
+            <h1 className="text-4xl font-black tracking-tight leading-none text-white drop-shadow-md">
               Task{" "}
-              <span style={{ background: "linear-gradient(90deg, #bfdbfe, #ffffff, #93c5fd)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
+              <span style={{ background: "linear-gradient(90deg, #7dd3fc, #bae6fd, #e0f2fe)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
                 Tracker
               </span>
             </h1>
-            <p className="text-white/45 text-xs mt-1">
+            <p className="text-blue-100/70 text-xs mt-1 drop-shadow">
               Updated {timeAgo(lastRefresh.toISOString())}
               {userEmail && <span className="hidden sm:inline"> · {userEmail}</span>}
             </p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            <button onClick={() => refresh()} disabled={refreshing} className={`inline-flex items-center gap-2 ${GLASS} ${GLASS_HOVER} text-white/70 hover:text-white font-medium text-sm px-4 py-2.5 rounded-xl transition-all disabled:opacity-60 active:scale-[0.98]`}>
+            <button onClick={() => refresh()} disabled={refreshing} className={`inline-flex items-center gap-2 ${HEADER_BTN} font-medium text-sm px-4 py-2.5 rounded-xl transition-all disabled:opacity-60 active:scale-[0.98]`}>
               <IconRefresh spinning={refreshing} />
               <span className="hidden sm:inline">{refreshing ? "Refreshing..." : "Refresh"}</span>
             </button>
-            <button onClick={() => { setFilter("by_employee"); }} className={`inline-flex items-center gap-2 ${GLASS} ${GLASS_HOVER} text-white/70 hover:text-white font-medium text-sm px-4 py-2.5 rounded-xl transition-all active:scale-[0.98] ${filter === "by_employee" ? "bg-white/20 border-white/35 text-white" : ""}`}>
+            <button
+              onClick={() => setFilter(isEmployeeView ? "all" : "by_employee")}
+              className={`inline-flex items-center gap-2 font-medium text-sm px-4 py-2.5 rounded-xl transition-all active:scale-[0.98] shadow-lg ${
+                isEmployeeView
+                  ? "bg-indigo-600 border border-indigo-500 text-white shadow-indigo-500/30"
+                  : HEADER_BTN
+              }`}
+            >
               <IconBarChart />
               <span className="hidden sm:inline">By Employee</span>
             </button>
-            <button onClick={() => setNewTaskOpen(true)} className="inline-flex items-center gap-2 bg-white/25 hover:bg-white/35 border border-white/35 hover:border-white/50 hover:-translate-y-0.5 text-white font-semibold text-sm px-5 py-2.5 rounded-xl shadow-lg transition-all active:scale-[0.98]">
+            <button onClick={() => setNewTaskOpen(true)} className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 border border-blue-500 hover:-translate-y-0.5 text-white font-semibold text-sm px-5 py-2.5 rounded-xl shadow-lg shadow-blue-900/40 transition-all active:scale-[0.98]">
               <IconPlus /> New Task
             </button>
-            <button onClick={signOut} disabled={signingOut} className={`inline-flex items-center gap-2 ${GLASS} ${GLASS_HOVER} text-white/65 hover:text-rose-300 font-medium text-sm px-3.5 py-2.5 rounded-xl transition-all disabled:opacity-60 active:scale-[0.98]`}>
+            <button onClick={signOut} disabled={signingOut} className={`inline-flex items-center gap-2 ${HEADER_BTN} hover:text-rose-600 font-medium text-sm px-3.5 py-2.5 rounded-xl transition-all disabled:opacity-60 active:scale-[0.98]`}>
               {signingOut ? <IconSpinner /> : <IconLogout />}
               <span className="hidden sm:inline">{signingOut ? "Signing out..." : "Sign out"}</span>
             </button>
           </div>
         </div>
 
-        {/* Stats */}
+        {/* Stats — solid white cards */}
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
           {[
-            { label: "Active",       count: counts.active,             color: "text-blue-200",    border: "border-blue-400/25" },
-            { label: "Needs Review", count: counts.pending_review,     color: "text-amber-200",   border: "border-amber-400/25" },
-            { label: "Revision",     count: counts.revision_requested, color: "text-orange-200",  border: "border-orange-400/25" },
-            { label: "Done",         count: counts.completed,          color: "text-emerald-200", border: "border-emerald-400/25" },
-            { label: "Escalated",    count: counts.escalated,          color: "text-rose-200",    border: "border-rose-400/25" },
+            { label: "Active",       count: counts.active,             color: "text-blue-600" },
+            { label: "Needs Review", count: counts.pending_review,     color: "text-amber-600" },
+            { label: "Revision",     count: counts.revision_requested, color: "text-orange-600" },
+            { label: "Done",         count: counts.completed,          color: "text-emerald-600" },
+            { label: "Escalated",    count: counts.escalated,          color: "text-rose-600" },
           ].map((s, i) => (
-            <div key={s.label} className={`${GLASS} rounded-2xl p-4 border ${s.border} text-center anim-rise hover:-translate-y-0.5 hover:bg-white/[0.18] transition-all duration-200`} style={{ animationDelay: `${i * 60}ms` }}>
-              <p className="text-white/40 text-xs mb-1">{s.label}</p>
+            <div key={s.label} className={`${CARD} rounded-2xl p-4 text-center anim-rise hover:-translate-y-0.5 transition-all duration-200`} style={{ animationDelay: `${i * 60}ms` }}>
+              <p className="text-slate-500 text-xs mb-1 font-medium">{s.label}</p>
               <p className={`text-2xl font-bold ${s.color}`}>{s.count}</p>
             </div>
           ))}
         </div>
 
-        {/* Filter tabs — no scrollbar */}
-        <div className="flex gap-1.5 mb-4 overflow-x-auto hide-scrollbar flex-wrap">
-          {FILTERS.map(f => (
-            <button
-              key={f.key}
-              onClick={() => { setFilter(f.key); if (f.key === "all") setSortBy("status"); }}
-              className={`shrink-0 px-3.5 py-1.5 rounded-xl text-sm font-medium transition-all flex items-center gap-1.5 ${
-                filter === f.key
-                  ? "bg-white/30 border border-white/40 text-white shadow-lg"
-                  : "bg-white/[0.08] border border-white/15 text-white/60 hover:text-white hover:bg-white/15 hover:border-white/25"
-              }`}
-            >
-              {f.key === "by_employee" ? <IconUser /> : null}
-              {f.label}
-              {f.key !== "by_employee" && counts[f.key] > 0 && (
-                <span className={`text-xs px-1.5 py-0.5 rounded-full ${filter === f.key ? "bg-white/25 text-white" : "bg-white/10 text-white/55"}`}>
-                  {counts[f.key]}
-                </span>
-              )}
-              {f.key === "pending_review" && counts.pending_review > 0 && (
-                <span className="w-2 h-2 rounded-full bg-amber-300 animate-pulse" />
-              )}
-            </button>
-          ))}
-        </div>
-
-        {/* Sort controls */}
-        {filter !== "by_employee" && (
-          <div className="flex items-center gap-2 mb-5">
-            <span className="text-xs text-white/35 shrink-0">Sort:</span>
-            {filter === "all" && (
-              <button onClick={() => setSortBy("status")} className={`text-xs px-3 py-1.5 rounded-lg border transition-all ${sortBy === "status" ? "bg-white/20 border-white/30 text-white" : "bg-white/5 border-white/15 text-white/45 hover:text-white/75"}`}>
-                By Status
+        {/* Filter tabs — solid white pills, no scrollbar */}
+        {!isEmployeeView && (
+          <div className="flex gap-1.5 mb-4 flex-wrap">
+            {FILTERS.map(f => (
+              <button
+                key={f.key}
+                onClick={() => { setFilter(f.key); if (f.key === "all") setSortBy("status"); }}
+                className={`shrink-0 px-3.5 py-1.5 rounded-xl text-sm font-medium transition-all flex items-center gap-1.5 shadow-md ${
+                  filter === f.key
+                    ? "bg-blue-600 border border-blue-500 text-white shadow-blue-900/30"
+                    : "bg-white/95 border border-white text-slate-600 hover:bg-white hover:text-slate-900"
+                }`}
+              >
+                {f.label}
+                {counts[f.key] > 0 && (
+                  <span className={`text-xs px-1.5 py-0.5 rounded-full ${filter === f.key ? "bg-white/25 text-white" : "bg-slate-100 text-slate-500"}`}>
+                    {counts[f.key]}
+                  </span>
+                )}
+                {f.key === "pending_review" && counts.pending_review > 0 && (
+                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                )}
               </button>
-            )}
-            <button onClick={() => setSortBy("date_desc")} className={`text-xs px-3 py-1.5 rounded-lg border transition-all ${sortBy === "date_desc" ? "bg-white/20 border-white/30 text-white" : "bg-white/5 border-white/15 text-white/45 hover:text-white/75"}`}>
-              Newest First
-            </button>
-            <button onClick={() => setSortBy("date_asc")} className={`text-xs px-3 py-1.5 rounded-lg border transition-all ${sortBy === "date_asc" ? "bg-white/20 border-white/30 text-white" : "bg-white/5 border-white/15 text-white/45 hover:text-white/75"}`}>
-              Oldest First
-            </button>
+            ))}
           </div>
         )}
 
+        {/* Sort controls — solid white pills */}
+        <div className="flex items-center gap-2 mb-5">
+          <span className="text-xs text-blue-100/80 font-medium shrink-0 drop-shadow">Sort:</span>
+          {filter === "all" && (
+            <button onClick={() => setSortBy("status")} className={`text-xs px-3 py-1.5 rounded-lg border font-medium transition-all shadow-sm ${sortBy === "status" ? "bg-blue-600 border-blue-500 text-white" : "bg-white/95 border-white text-slate-600 hover:bg-white"}`}>
+              By Status
+            </button>
+          )}
+          <button onClick={() => setSortBy("date_desc")} className={`text-xs px-3 py-1.5 rounded-lg border font-medium transition-all shadow-sm ${sortBy === "date_desc" ? "bg-blue-600 border-blue-500 text-white" : "bg-white/95 border-white text-slate-600 hover:bg-white"}`}>
+            Newest First
+          </button>
+          <button onClick={() => setSortBy("date_asc")} className={`text-xs px-3 py-1.5 rounded-lg border font-medium transition-all shadow-sm ${sortBy === "date_asc" ? "bg-blue-600 border-blue-500 text-white" : "bg-white/95 border-white text-slate-600 hover:bg-white"}`}>
+            Oldest First
+          </button>
+        </div>
+
         {/* Task list or employee view */}
-        {filter === "by_employee" ? (
+        {isEmployeeView ? (
           <EmployeeView tasks={tasks} sortBy={sortBy} expandedId={expandedId} onToggle={id => setExpandedId(expandedId === id ? null : id)} onAction={handleAction} userMap={userMap} />
         ) : (
           <div className="space-y-3">
             {visible.length === 0 && (
-              <div className={`text-center text-white/45 py-16 ${GLASS} rounded-2xl`}>
+              <div className={`text-center text-slate-500 py-16 ${CARD} rounded-2xl`}>
                 {filter === "all" ? "No tasks yet. Create one above!" : `No ${filter.replace(/_/g, " ")} tasks.`}
               </div>
             )}
