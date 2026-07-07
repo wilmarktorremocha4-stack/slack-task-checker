@@ -2,6 +2,7 @@
 export const ALLOWED_EMAILS = [
   "wil@operationamz.com",
   "brandon@operationamz.com",
+  "brandon@firesidetrade.com",
 ];
 
 export function isAllowedEmail(email: string | null | undefined): boolean {
