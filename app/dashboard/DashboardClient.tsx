@@ -293,9 +293,13 @@ function TaskCard({ task, expanded, onToggle, onAction, userMap, accentColor }: 
     if (action === "revision" && !revisionText.trim()) return;
     if (action === "message" && !messageText.trim()) return;
     setWorking(action);
-    const content = action === "revision" ? revisionText : action === "message" ? messageText : undefined;
+    const content =
+      action === "revision" ? revisionText
+      : action === "message" ? messageText
+      : action === "approve" ? (revisionText.trim() || undefined)
+      : undefined;
     await onAction(task.id, action, content);
-    if (action === "revision") setRevisionText("");
+    if (action === "revision" || action === "approve") setRevisionText("");
     if (action === "message") setMessageText("");
     setWorking(null);
   }
@@ -404,7 +408,7 @@ function TaskCard({ task, expanded, onToggle, onAction, userMap, accentColor }: 
               <textarea
                 value={revisionText}
                 onChange={e => setRevisionText(e.target.value)}
-                placeholder="Describe what needs to be changed or fixed..."
+                placeholder="Optional: add a message to Slack (e.g. 'Thanks, great work!') — or describe what needs changing to request a revision..."
                 className={`${INPUT_CLS} resize-none`}
                 rows={3}
               />
@@ -922,7 +926,7 @@ export default function DashboardClient({ initialTasks, userEmail }: {
       } else if (action === "message") {
         res = await fetch(`/api/tasks/${taskId}/message`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ content }) });
       } else {
-        res = await fetch(`/api/tasks/${taskId}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ action }) });
+        res = await fetch(`/api/tasks/${taskId}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ action, content }) });
       }
       if (res.ok) {
         const msgs: Record<TaskAction, string> = {

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdmin } from "@/lib/supabase";
-import { postThreadReply, slackMention } from "@/lib/slack";
+import { postThreadReply, postColoredMessage, slackMention } from "@/lib/slack";
 import { calculateNextFollowupAt } from "@/lib/followup-schedule";
 import { sendFollowupForTask } from "@/lib/followup-engine";
 
@@ -30,8 +30,9 @@ export async function GET(_req: Request, { params }: RouteContext) {
 export async function PATCH(request: Request, { params }: RouteContext) {
   const { id } = await params;
   const supabase = createSupabaseAdmin();
-  const { action } = (await request.json()) as {
+  const { action, content } = (await request.json()) as {
     action: "approve" | "cancel" | "followup_now" | "reopen";
+    content?: string;
   };
 
   const { data: task } = await supabase
@@ -49,6 +50,26 @@ export async function PATCH(request: Request, { params }: RouteContext) {
       return NextResponse.json({ error: "Task is already closed" }, { status: 409 });
     }
 
+    const assigneeIds: string[] = task.assignee_ids?.length ? task.assignee_ids : [task.assigned_to_id];
+    const mentions = assigneeIds.map((uid: string) => slackMention(uid)).join(" ");
+
+    // If manager typed a message, post it to Slack first before the approval notice
+    if (content?.trim()) {
+      await postColoredMessage(
+        task.channel_id,
+        task.thread_ts,
+        "#3B82F6",
+        `${mentions} ${task.assigned_by_name}: ${content.trim()}`
+      );
+      await supabase.from("task_comments").insert({
+        task_id: id,
+        author_type: "brandon",
+        author_name: task.assigned_by_name,
+        content: content.trim(),
+        sent_to_slack: true,
+      });
+    }
+
     await supabase
       .from("tasks")
       .update({ status: "completed", completed_at: new Date().toISOString(), next_followup_at: null })
@@ -57,7 +78,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     await postThreadReply(
       task.channel_id,
       task.thread_ts,
-      `✅ ${slackMention(task.assigned_to_id)} ${task.assigned_by_name} reviewed and approved this task. Well done!`
+      `✅ ${mentions} ${task.assigned_by_name} reviewed and approved this task. Well done!`
     );
 
     await supabase.from("task_comments").insert({
