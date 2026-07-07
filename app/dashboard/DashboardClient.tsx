@@ -12,12 +12,12 @@ type ToastType = { id: number; message: string; ok: boolean };
 type TaskAction = "approve" | "cancel" | "revision" | "followup_now" | "reopen" | "message";
 
 const STATUS = {
-  active:             { label: "Active",        badge: "bg-indigo-100 text-indigo-700 border-indigo-200",  dot: "bg-indigo-500" },
-  pending_review:     { label: "Needs Review",  badge: "bg-amber-100 text-amber-700 border-amber-200",     dot: "bg-amber-500" },
-  revision_requested: { label: "Revision Sent", badge: "bg-orange-100 text-orange-700 border-orange-200",  dot: "bg-orange-500" },
-  completed:          { label: "Done",          badge: "bg-emerald-100 text-emerald-700 border-emerald-200", dot: "bg-emerald-500" },
-  escalated:          { label: "Escalated",     badge: "bg-rose-100 text-rose-700 border-rose-200",        dot: "bg-rose-500" },
-  cancelled:          { label: "Cancelled",     badge: "bg-slate-100 text-slate-500 border-slate-200",     dot: "bg-slate-400" },
+  active:             { label: "Active",        badge: "bg-indigo-500/20 text-indigo-300 border-indigo-500/30",  dot: "bg-indigo-400" },
+  pending_review:     { label: "Needs Review",  badge: "bg-amber-500/20 text-amber-300 border-amber-500/30",     dot: "bg-amber-400" },
+  revision_requested: { label: "Revision Sent", badge: "bg-orange-500/20 text-orange-300 border-orange-500/30",  dot: "bg-orange-400" },
+  completed:          { label: "Done",          badge: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30", dot: "bg-emerald-400" },
+  escalated:          { label: "Escalated",     badge: "bg-rose-500/20 text-rose-300 border-rose-500/30",        dot: "bg-rose-400" },
+  cancelled:          { label: "Cancelled",     badge: "bg-white/[0.08] text-white/40 border-white/10",          dot: "bg-white/30" },
 } as const;
 
 const FILTERS = [
@@ -127,8 +127,8 @@ function Toast({ toasts }: { toasts: ToastType[] }) {
           key={t.id}
           className={`px-4 py-3 rounded-xl text-sm font-medium shadow-lg border backdrop-blur-xl ${
             t.ok
-              ? "bg-emerald-50/95 border-emerald-200 text-emerald-700"
-              : "bg-rose-50/95 border-rose-200 text-rose-700"
+              ? "bg-emerald-950/90 border-emerald-500/40 text-emerald-300"
+              : "bg-rose-950/90 border-rose-500/40 text-rose-300"
           }`}
         >
           {t.ok ? "✓" : "✗"} {t.message}
@@ -155,16 +155,15 @@ function ConfirmDialog({
   onConfirm: () => void;
   onClose: () => void;
 }) {
-  // Portal to <body> — ancestors with backdrop-filter would otherwise trap the fixed overlay
   return createPortal(
-    <div className="fixed inset-0 bg-slate-900/30 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white/90 backdrop-blur-xl border border-white rounded-2xl w-full max-w-sm shadow-2xl shadow-indigo-200/50 p-6 anim-pop">
-        <h3 className="text-base font-semibold text-slate-800 mb-2">{title}</h3>
-        <p className="text-sm text-slate-500 mb-6 leading-relaxed">{body}</p>
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-[#0d1b2e]/95 backdrop-blur-xl border border-white/10 rounded-2xl w-full max-w-sm shadow-2xl shadow-black/60 p-6 anim-pop">
+        <h3 className="text-base font-semibold text-white/90 mb-2">{title}</h3>
+        <p className="text-sm text-white/50 mb-6 leading-relaxed">{body}</p>
         <div className="flex gap-3">
           <button
             onClick={onClose}
-            className="flex-1 bg-white border border-slate-200 hover:bg-slate-50 hover:shadow-md text-slate-600 font-medium text-sm py-2.5 rounded-xl transition-all active:scale-[0.98]"
+            className="flex-1 bg-white/[0.06] border border-white/10 hover:bg-white/10 hover:shadow-md text-white/70 font-medium text-sm py-2.5 rounded-xl transition-all active:scale-[0.98]"
           >
             Keep as is
           </button>
@@ -172,8 +171,8 @@ function ConfirmDialog({
             onClick={() => { onConfirm(); onClose(); }}
             className={`flex-1 font-semibold text-sm py-2.5 rounded-xl text-white transition-all active:scale-[0.98] shadow-lg ${
               danger
-                ? "bg-rose-500 hover:bg-rose-600 hover:shadow-xl hover:shadow-rose-500/40 hover:-translate-y-0.5 shadow-rose-500/25"
-                : "bg-indigo-500 hover:bg-indigo-600 hover:shadow-xl hover:shadow-indigo-500/40 hover:-translate-y-0.5 shadow-indigo-500/25"
+                ? "bg-rose-500/90 hover:bg-rose-500 hover:shadow-xl hover:shadow-rose-500/30 hover:-translate-y-0.5"
+                : "bg-indigo-500/90 hover:bg-indigo-500 hover:shadow-xl hover:shadow-indigo-500/30 hover:-translate-y-0.5"
             }`}
           >
             {confirmLabel}
@@ -191,7 +190,7 @@ function CommentBubble({ c }: { c: TaskComment }) {
   if (c.author_type === "system") {
     return (
       <div className="flex justify-center my-1">
-        <span className="text-xs text-slate-400 italic px-3 py-1 bg-slate-100/80 rounded-full text-center">
+        <span className="text-xs text-white/30 italic px-3 py-1 bg-white/[0.04] border border-white/[0.06] rounded-full text-center">
           {c.content} · {timeAgo(c.created_at)}
         </span>
       </div>
@@ -203,18 +202,18 @@ function CommentBubble({ c }: { c: TaskComment }) {
       <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
         isBrandon
           ? "bg-gradient-to-br from-indigo-500 to-violet-600 text-white"
-          : "bg-slate-200 text-slate-600"
+          : "bg-white/10 text-white/70"
       }`}>
         {c.author_name.charAt(0).toUpperCase()}
       </div>
       <div className={`max-w-[75%] ${isBrandon ? "items-end" : "items-start"} flex flex-col`}>
-        <span className="text-xs text-slate-400 mb-1 px-1">
+        <span className="text-xs text-white/30 mb-1 px-1">
           {c.author_name} · {timeAgo(c.created_at)}
         </span>
         <div className={`px-3.5 py-2 rounded-2xl text-sm leading-relaxed ${
           isBrandon
             ? "bg-gradient-to-br from-indigo-500 to-violet-600 text-white rounded-tr-sm shadow-md shadow-indigo-500/20"
-            : "bg-white border border-slate-200 text-slate-700 rounded-tl-sm shadow-sm"
+            : "bg-white/[0.07] border border-white/10 text-white/80 rounded-tl-sm"
         }`}>
           {c.content}
         </div>
@@ -271,10 +270,10 @@ function TaskCard({
 
   return (
     <div
-      className={`rounded-2xl border transition-all duration-200 bg-white/70 backdrop-blur-xl ${
+      className={`rounded-2xl border transition-all duration-200 bg-white/[0.04] backdrop-blur-xl ${
         isPendingReview
-          ? "border-amber-300 shadow-lg shadow-amber-200/40 ring-1 ring-amber-200"
-          : "border-white/90 shadow-md shadow-indigo-100/50 hover:shadow-lg hover:shadow-indigo-200/60"
+          ? "border-amber-400/30 shadow-lg shadow-amber-500/10 ring-1 ring-amber-400/20"
+          : "border-white/[0.07] shadow-md shadow-black/30 hover:shadow-lg hover:shadow-blue-500/10 hover:border-white/[0.12]"
       }`}
     >
       {confirm === "cancel" && (
@@ -314,7 +313,7 @@ function TaskCard({
       {/* Card header — always visible */}
       <button
         onClick={onToggle}
-        className="w-full text-left p-5 flex items-start gap-4 hover:bg-indigo-50/40 rounded-2xl transition-colors"
+        className="w-full text-left p-5 flex items-start gap-4 hover:bg-white/[0.03] rounded-2xl transition-colors"
       >
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1.5 flex-wrap">
@@ -323,35 +322,35 @@ function TaskCard({
               {cfg.label}
             </span>
             {isPendingReview && (
-              <span className="text-xs font-medium text-amber-600">Awaiting your review</span>
+              <span className="text-xs font-medium text-amber-400">Awaiting your review</span>
             )}
-            <span className="text-slate-400 text-xs">{timeAgo(task.created_at)}</span>
+            <span className="text-white/30 text-xs">{timeAgo(task.created_at)}</span>
           </div>
-          <p className="font-medium text-slate-800 leading-snug">{task.task_text}</p>
-          <p className="text-sm text-slate-500 mt-1">
-            <span className="text-slate-600 font-medium">{task.assigned_to_name}</span>
-            <span className="mx-1 text-slate-300">·</span>
+          <p className="font-medium text-white/90 leading-snug">{task.task_text}</p>
+          <p className="text-sm text-white/40 mt-1">
+            <span className="text-white/60 font-medium">{task.assigned_to_name}</span>
+            <span className="mx-1 text-white/20">·</span>
             assigned by {task.assigned_by_name}
           </p>
         </div>
 
         <div className="text-right shrink-0 flex flex-col items-end gap-1">
-          <span className="text-xs text-slate-400">
+          <span className="text-xs text-white/30">
             {task.followup_count}/{task.max_followups} follow-ups
           </span>
           {isOpen && task.next_followup_at && (
-            <span className={`text-xs font-medium ${nextIn(task.next_followup_at) === "overdue" ? "text-rose-500" : "text-indigo-500"}`}>
+            <span className={`text-xs font-medium ${nextIn(task.next_followup_at) === "overdue" ? "text-rose-400" : "text-indigo-400"}`}>
               Next: {nextIn(task.next_followup_at)}
             </span>
           )}
           {task.status === "completed" && task.completed_at && (
-            <span className="text-xs text-emerald-600">Completed {timeAgo(task.completed_at)}</span>
+            <span className="text-xs text-emerald-400">Completed {timeAgo(task.completed_at)}</span>
           )}
           {task.status === "escalated" && task.escalated_at && (
-            <span className="text-xs text-rose-500">Escalated {timeAgo(task.escalated_at)}</span>
+            <span className="text-xs text-rose-400">Escalated {timeAgo(task.escalated_at)}</span>
           )}
           <svg
-            className={`w-4 h-4 text-slate-300 mt-1 transition-transform ${expanded ? "rotate-180" : ""}`}
+            className={`w-4 h-4 text-white/20 mt-1 transition-transform ${expanded ? "rotate-180" : ""}`}
             viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
           >
             <path d="m6 9 6 6 6-6" />
@@ -361,27 +360,34 @@ function TaskCard({
 
       {/* Expanded thread + actions */}
       {expanded && (
-        <div className="border-t border-slate-100 px-5 pb-5 pt-4 anim-expand">
-          {/* Conversation thread */}
-          {sortedComments.length > 0 ? (
-            <div
-              ref={threadRef}
-              className="flex flex-col gap-3 max-h-72 overflow-y-auto mb-4 pr-1"
-            >
-              {sortedComments.map(c => (
-                <CommentBubble key={c.id} c={c} />
-              ))}
+        <div className="border-t border-white/[0.07] px-5 pb-5 pt-4 anim-expand">
+
+          {/* Activity / History section */}
+          <div className="mb-4">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-[11px] font-semibold text-white/30 uppercase tracking-widest">Activity</span>
+              <div className="flex-1 h-px bg-white/[0.07]" />
             </div>
-          ) : (
-            <p className="text-sm text-slate-400 italic mb-4 text-center py-3">
-              No messages yet — thread activity will appear here.
-            </p>
-          )}
+            {sortedComments.length > 0 ? (
+              <div
+                ref={threadRef}
+                className="flex flex-col gap-3 max-h-72 overflow-y-auto pr-1"
+              >
+                {sortedComments.map(c => (
+                  <CommentBubble key={c.id} c={c} />
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-white/30 italic text-center py-3">
+                No activity yet — messages and events will appear here.
+              </p>
+            )}
+          </div>
 
           {/* Actions for pending_review */}
           {isPendingReview && (
             <div className="space-y-3">
-              <div className="flex items-center gap-2 text-sm text-amber-600 font-medium bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5">
+              <div className="flex items-center gap-2 text-sm text-amber-300 font-medium bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-2.5">
                 <span>👀</span>
                 <span>{task.assigned_to_name} says this is done. Approve it, or describe what needs revising.</span>
               </div>
@@ -389,21 +395,21 @@ function TaskCard({
                 value={revisionText}
                 onChange={e => setRevisionText(e.target.value)}
                 placeholder="Describe what needs to be changed or fixed..."
-                className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-300/60 focus:border-orange-300 resize-none"
+                className="w-full bg-white/[0.06] border border-white/10 rounded-xl px-4 py-3 text-sm text-white/80 placeholder-white/25 focus:outline-none focus:ring-2 focus:ring-orange-400/30 focus:border-orange-400/40 resize-none"
                 rows={3}
               />
               <div className="flex gap-3">
                 <button
                   disabled={!!working}
                   onClick={() => handle("approve")}
-                  className="flex-1 inline-flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-600 hover:shadow-xl hover:shadow-emerald-500/40 hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0 text-white font-semibold text-sm py-2.5 rounded-xl shadow-lg shadow-emerald-500/25 transition-all active:scale-[0.98]"
+                  className="flex-1 inline-flex items-center justify-center gap-2 bg-emerald-500/90 hover:bg-emerald-500 hover:shadow-xl hover:shadow-emerald-500/25 hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0 text-white font-semibold text-sm py-2.5 rounded-xl shadow-lg shadow-emerald-500/20 transition-all active:scale-[0.98]"
                 >
                   <IconCheck /> {working === "approve" ? "Approving..." : "Approve & Close"}
                 </button>
                 <button
                   disabled={!!working || !revisionText.trim()}
                   onClick={() => handle("revision")}
-                  className="flex-1 inline-flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 hover:shadow-xl hover:shadow-orange-500/40 hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0 text-white font-semibold text-sm py-2.5 rounded-xl shadow-lg shadow-orange-500/25 transition-all active:scale-[0.98]"
+                  className="flex-1 inline-flex items-center justify-center gap-2 bg-orange-500/90 hover:bg-orange-500 hover:shadow-xl hover:shadow-orange-500/25 hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0 text-white font-semibold text-sm py-2.5 rounded-xl shadow-lg shadow-orange-500/20 transition-all active:scale-[0.98]"
                 >
                   <IconEdit /> {working === "revision" ? "Sending..." : "Request Revision"}
                 </button>
@@ -411,7 +417,7 @@ function TaskCard({
               <button
                 disabled={!!working}
                 onClick={() => setConfirm("cancel")}
-                className="w-full inline-flex items-center justify-center gap-2 bg-white border border-rose-200 hover:bg-rose-50 hover:border-rose-300 hover:shadow-md hover:-translate-y-0.5 text-rose-500 font-medium text-sm py-2.5 rounded-xl transition-all disabled:opacity-50 disabled:hover:translate-y-0 active:scale-[0.98]"
+                className="w-full inline-flex items-center justify-center gap-2 bg-white/[0.05] border border-rose-500/30 hover:bg-rose-500/10 hover:border-rose-500/50 hover:shadow-md hover:-translate-y-0.5 text-rose-400 font-medium text-sm py-2.5 rounded-xl transition-all disabled:opacity-50 disabled:hover:translate-y-0 active:scale-[0.98]"
               >
                 <IconTrash /> Cancel Task
               </button>
@@ -421,21 +427,21 @@ function TaskCard({
           {/* Actions for open tasks (active / revision_requested) */}
           {isOpen && (
             <div className="space-y-3">
-              <p className="text-xs text-slate-400 text-center">
+              <p className="text-xs text-white/30 text-center">
                 Waiting for {task.assigned_to_name} to respond. Follow-ups are running automatically.
               </p>
               <div className="flex gap-3">
                 <button
                   disabled={!!working}
                   onClick={() => setConfirm("followup_now")}
-                  className="flex-1 inline-flex items-center justify-center gap-2 bg-gradient-to-r from-indigo-500 to-violet-600 hover:from-indigo-600 hover:to-violet-700 hover:shadow-xl hover:shadow-indigo-500/40 hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0 text-white font-semibold text-sm py-2.5 rounded-xl shadow-lg shadow-indigo-500/25 transition-all active:scale-[0.98]"
+                  className="flex-1 inline-flex items-center justify-center gap-2 bg-gradient-to-r from-indigo-500 to-violet-600 hover:from-indigo-600 hover:to-violet-700 hover:shadow-xl hover:shadow-indigo-500/30 hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0 text-white font-semibold text-sm py-2.5 rounded-xl shadow-lg shadow-indigo-500/20 transition-all active:scale-[0.98]"
                 >
                   <IconBolt /> {working === "followup_now" ? "Sending..." : "Send Follow-up Now"}
                 </button>
                 <button
                   disabled={!!working}
                   onClick={() => setConfirm("cancel")}
-                  className="flex-1 inline-flex items-center justify-center gap-2 bg-white border border-rose-200 hover:bg-rose-50 hover:border-rose-300 hover:shadow-md hover:-translate-y-0.5 text-rose-500 font-medium text-sm py-2.5 rounded-xl transition-all disabled:opacity-50 disabled:hover:translate-y-0 active:scale-[0.98]"
+                  className="flex-1 inline-flex items-center justify-center gap-2 bg-white/[0.05] border border-rose-500/30 hover:bg-rose-500/10 hover:border-rose-500/50 hover:shadow-md hover:-translate-y-0.5 text-rose-400 font-medium text-sm py-2.5 rounded-xl transition-all disabled:opacity-50 disabled:hover:translate-y-0 active:scale-[0.98]"
                 >
                   <IconTrash /> {working === "cancel" ? "Cancelling..." : "Cancel Task"}
                 </button>
@@ -446,21 +452,21 @@ function TaskCard({
           {/* Closed statuses: allow reopening */}
           {(task.status === "completed" || task.status === "escalated" || task.status === "cancelled") && (
             <div className="space-y-3">
-              <p className="text-xs text-slate-400 text-center italic">
+              <p className="text-xs text-white/30 text-center italic">
                 This task is closed. You can still message the thread below, or reopen it.
               </p>
               <button
                 disabled={!!working}
                 onClick={() => setConfirm("reopen")}
-                className="w-full inline-flex items-center justify-center gap-2 bg-white border border-indigo-200 hover:bg-indigo-50 hover:border-indigo-300 hover:shadow-md hover:-translate-y-0.5 text-indigo-500 font-medium text-sm py-2.5 rounded-xl transition-all disabled:opacity-50 disabled:hover:translate-y-0 active:scale-[0.98]"
+                className="w-full inline-flex items-center justify-center gap-2 bg-white/[0.05] border border-indigo-500/30 hover:bg-indigo-500/10 hover:border-indigo-500/50 hover:shadow-md hover:-translate-y-0.5 text-indigo-400 font-medium text-sm py-2.5 rounded-xl transition-all disabled:opacity-50 disabled:hover:translate-y-0 active:scale-[0.98]"
               >
                 <IconRefresh /> {working === "reopen" ? "Reopening..." : "Reopen Task"}
               </button>
             </div>
           )}
 
-          {/* Message composer — talk to the assignee in the Slack thread without changing status */}
-          <div className="mt-4 pt-4 border-t border-slate-100">
+          {/* Message composer */}
+          <div className="mt-4 pt-4 border-t border-white/[0.07]">
             <div className="flex gap-2">
               <input
                 type="text"
@@ -470,12 +476,12 @@ function TaskCard({
                   if (e.key === "Enter" && messageText.trim() && !working) handle("message");
                 }}
                 placeholder={`Message ${task.assigned_to_name} in the Slack thread...`}
-                className="flex-1 bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-300/60 focus:border-indigo-300"
+                className="flex-1 bg-white/[0.06] border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white/80 placeholder-white/25 focus:outline-none focus:ring-2 focus:ring-indigo-400/30 focus:border-indigo-400/40"
               />
               <button
                 disabled={!!working || !messageText.trim()}
                 onClick={() => handle("message")}
-                className="inline-flex items-center gap-2 bg-gradient-to-r from-indigo-500 to-violet-600 hover:from-indigo-600 hover:to-violet-700 hover:shadow-lg hover:shadow-indigo-500/40 hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0 text-white font-semibold text-sm px-4 py-2.5 rounded-xl shadow-md shadow-indigo-500/20 transition-all active:scale-[0.98]"
+                className="inline-flex items-center gap-2 bg-gradient-to-r from-indigo-500 to-violet-600 hover:from-indigo-600 hover:to-violet-700 hover:shadow-lg hover:shadow-indigo-500/30 hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0 text-white font-semibold text-sm px-4 py-2.5 rounded-xl shadow-md shadow-indigo-500/20 transition-all active:scale-[0.98]"
                 title="Send message to Slack thread"
               >
                 {working === "message" ? (
@@ -488,7 +494,7 @@ function TaskCard({
                 )}
               </button>
             </div>
-            <p className="text-[11px] text-slate-400 mt-1.5 px-1">
+            <p className="text-[11px] text-white/25 mt-1.5 px-1">
               Sends to the Slack thread with a real @mention. Doesn&apos;t change status or follow-ups.
             </p>
           </div>
@@ -556,13 +562,13 @@ function NewTaskModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-slate-900/30 backdrop-blur-sm z-40 flex items-center justify-center p-4">
-      <div className="bg-white/90 backdrop-blur-xl border border-white rounded-3xl w-full max-w-lg shadow-2xl shadow-indigo-200/50 anim-pop">
-        <div className="flex items-center justify-between p-6 border-b border-slate-100">
-          <h2 className="text-lg font-semibold text-slate-800">Assign New Task</h2>
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 flex items-center justify-center p-4">
+      <div className="bg-[#0d1b2e]/95 backdrop-blur-xl border border-white/10 rounded-3xl w-full max-w-lg shadow-2xl shadow-black/60 anim-pop">
+        <div className="flex items-center justify-between p-6 border-b border-white/[0.07]">
+          <h2 className="text-lg font-semibold text-white/90">Assign New Task</h2>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 hover:text-slate-700 hover:rotate-90 text-slate-500 flex items-center justify-center transition-all duration-200"
+            className="w-8 h-8 rounded-full bg-white/[0.07] hover:bg-white/[0.12] hover:text-white hover:rotate-90 text-white/50 flex items-center justify-center transition-all duration-200"
             aria-label="Close"
           >
             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -574,22 +580,21 @@ function NewTaskModal({
         <form onSubmit={submit} className="p-6 space-y-5">
           {/* Assignee */}
           <div>
-            <label className="block text-sm font-medium text-slate-600 mb-2">Assign to</label>
+            <label className="block text-sm font-medium text-white/50 mb-2">Assign to</label>
             {loadingUsers ? (
-              <div className="text-sm text-slate-400 py-2">Loading team members...</div>
+              <div className="text-sm text-white/30 py-2">Loading team members...</div>
             ) : selectedUser ? (
-              // Once chosen, only the selected person is shown
-              <div className="flex items-center justify-between bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-3 anim-pop">
+              <div className="flex items-center justify-between bg-indigo-500/10 border border-indigo-500/30 rounded-xl px-4 py-3 anim-pop">
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 text-white flex items-center justify-center text-sm font-bold">
                     {selectedUser.name.charAt(0).toUpperCase()}
                   </div>
-                  <span className="text-sm font-semibold text-slate-700">{selectedUser.name}</span>
+                  <span className="text-sm font-semibold text-white/80">{selectedUser.name}</span>
                 </div>
                 <button
                   type="button"
                   onClick={() => { setAssigneeId(""); setUserSearch(""); }}
-                  className="text-xs font-medium text-indigo-500 hover:text-indigo-700 bg-white border border-indigo-200 hover:bg-indigo-50 hover:shadow-sm px-3 py-1.5 rounded-lg transition-all active:scale-[0.97]"
+                  className="text-xs font-medium text-indigo-400 hover:text-indigo-300 bg-white/[0.07] border border-white/10 hover:bg-white/10 px-3 py-1.5 rounded-lg transition-all active:scale-[0.97]"
                 >
                   Change
                 </button>
@@ -601,18 +606,18 @@ function NewTaskModal({
                   placeholder="Search team members..."
                   value={userSearch}
                   onChange={e => setUserSearch(e.target.value)}
-                  className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-300/60 focus:border-indigo-300"
+                  className="w-full bg-white/[0.06] border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white/80 placeholder-white/25 focus:outline-none focus:ring-2 focus:ring-indigo-400/30 focus:border-indigo-400/40"
                 />
-                <div className="max-h-40 overflow-y-auto bg-white border border-slate-200 rounded-xl divide-y divide-slate-100">
+                <div className="max-h-40 overflow-y-auto bg-white/[0.04] border border-white/[0.07] rounded-xl divide-y divide-white/[0.05]">
                   {filteredUsers.length === 0 && (
-                    <p className="text-sm text-slate-400 p-3 text-center">No members found</p>
+                    <p className="text-sm text-white/30 p-3 text-center">No members found</p>
                   )}
                   {filteredUsers.map(u => (
                     <button
                       key={u.id}
                       type="button"
                       onClick={() => { setAssigneeId(u.id); setUserSearch(""); }}
-                      className="w-full text-left px-4 py-2.5 text-sm text-slate-600 hover:bg-indigo-50 transition-colors"
+                      className="w-full text-left px-4 py-2.5 text-sm text-white/60 hover:bg-indigo-500/10 hover:text-white/90 transition-colors"
                     >
                       {u.name}
                     </button>
@@ -624,13 +629,13 @@ function NewTaskModal({
 
           {/* Task text */}
           <div>
-            <label className="block text-sm font-medium text-slate-600 mb-2">Task description</label>
+            <label className="block text-sm font-medium text-white/50 mb-2">Task description</label>
             <textarea
               required
               value={taskText}
               onChange={e => setTaskText(e.target.value)}
               placeholder="e.g. Prepare the supplier outreach plan by Friday"
-              className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-300/60 focus:border-indigo-300 resize-none"
+              className="w-full bg-white/[0.06] border border-white/10 rounded-xl px-4 py-3 text-sm text-white/80 placeholder-white/25 focus:outline-none focus:ring-2 focus:ring-indigo-400/30 focus:border-indigo-400/40 resize-none"
               rows={4}
             />
           </div>
@@ -639,14 +644,14 @@ function NewTaskModal({
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 bg-white border border-slate-200 hover:bg-slate-50 hover:shadow-md text-slate-600 font-medium text-sm py-3 rounded-xl transition-all active:scale-[0.98]"
+              className="flex-1 bg-white/[0.06] border border-white/10 hover:bg-white/[0.10] hover:shadow-md text-white/60 font-medium text-sm py-3 rounded-xl transition-all active:scale-[0.98]"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={!assigneeId || !taskText.trim() || submitting}
-              className="flex-1 bg-gradient-to-r from-indigo-500 to-violet-600 hover:from-indigo-600 hover:to-violet-700 hover:shadow-xl hover:shadow-indigo-500/40 hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0 text-white font-semibold text-sm py-3 rounded-xl shadow-lg shadow-indigo-500/25 transition-all active:scale-[0.98]"
+              className="flex-1 bg-gradient-to-r from-indigo-500 to-violet-600 hover:from-indigo-600 hover:to-violet-700 hover:shadow-xl hover:shadow-indigo-500/30 hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0 text-white font-semibold text-sm py-3 rounded-xl shadow-lg shadow-indigo-500/20 transition-all active:scale-[0.98]"
             >
               {submitting ? "Posting to Slack..." : "Assign Task"}
             </button>
@@ -769,10 +774,11 @@ export default function DashboardClient({
   const visible = filter === "all" ? tasks : tasks.filter(t => t.status === filter);
 
   return (
-    <main className="min-h-screen relative bg-gradient-to-br from-indigo-200 via-sky-100 to-blue-200 text-slate-800 overflow-x-hidden">
-      {/* Ambient glow orbs */}
-      <div className="pointer-events-none fixed -top-32 -left-32 w-96 h-96 rounded-full bg-blue-400/30 blur-3xl" />
-      <div className="pointer-events-none fixed -bottom-40 -right-24 w-[28rem] h-[28rem] rounded-full bg-indigo-400/30 blur-3xl" />
+    <main className="min-h-screen relative bg-[#040b18] text-white overflow-x-hidden">
+      {/* Deep space glow orbs */}
+      <div className="pointer-events-none fixed -top-48 -left-48 w-[40rem] h-[40rem] rounded-full bg-blue-600/15 blur-[120px]" />
+      <div className="pointer-events-none fixed -bottom-48 -right-32 w-[36rem] h-[36rem] rounded-full bg-indigo-700/15 blur-[120px]" />
+      <div className="pointer-events-none fixed top-1/3 left-1/2 -translate-x-1/2 w-96 h-96 rounded-full bg-violet-600/8 blur-[100px]" />
 
       <Toast toasts={toasts} />
       {newTaskOpen && (
@@ -789,8 +795,8 @@ export default function DashboardClient({
           <div className="flex items-center gap-3">
             <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-xl shadow-lg shadow-indigo-500/30">📋</div>
             <div>
-              <h1 className="text-2xl font-bold tracking-tight text-slate-800">Task Tracker</h1>
-              <p className="text-slate-400 text-xs">
+              <h1 className="text-2xl font-bold tracking-tight text-white/90">Task Tracker</h1>
+              <p className="text-white/30 text-xs">
                 Updated {timeAgo(lastRefresh.toISOString())}
                 {userEmail && <span className="hidden sm:inline"> · {userEmail}</span>}
               </p>
@@ -800,7 +806,7 @@ export default function DashboardClient({
             <button
               onClick={() => refresh()}
               disabled={refreshing}
-              className="inline-flex items-center gap-2 bg-white/80 border border-slate-200 hover:bg-white hover:shadow-md hover:-translate-y-0.5 text-slate-600 font-medium text-sm px-4 py-2.5 rounded-xl shadow-sm transition-all disabled:opacity-60 disabled:hover:translate-y-0 active:scale-[0.98]"
+              className="inline-flex items-center gap-2 bg-white/[0.07] border border-white/10 hover:bg-white/[0.12] hover:shadow-md hover:-translate-y-0.5 text-white/60 font-medium text-sm px-4 py-2.5 rounded-xl transition-all disabled:opacity-60 disabled:hover:translate-y-0 active:scale-[0.98]"
               title="Refresh tasks"
             >
               <IconRefresh spinning={refreshing} />
@@ -808,13 +814,13 @@ export default function DashboardClient({
             </button>
             <button
               onClick={() => setNewTaskOpen(true)}
-              className="inline-flex items-center gap-2 bg-gradient-to-r from-indigo-500 to-violet-600 hover:from-indigo-600 hover:to-violet-700 hover:shadow-xl hover:shadow-indigo-500/40 hover:-translate-y-0.5 text-white font-semibold text-sm px-5 py-2.5 rounded-xl shadow-lg shadow-indigo-500/25 transition-all active:scale-[0.98]"
+              className="inline-flex items-center gap-2 bg-gradient-to-r from-indigo-500 to-violet-600 hover:from-indigo-600 hover:to-violet-700 hover:shadow-xl hover:shadow-indigo-500/30 hover:-translate-y-0.5 text-white font-semibold text-sm px-5 py-2.5 rounded-xl shadow-lg shadow-indigo-500/20 transition-all active:scale-[0.98]"
             >
               <IconPlus /> New Task
             </button>
             <button
               onClick={signOut}
-              className="inline-flex items-center gap-2 bg-white/80 border border-slate-200 hover:bg-white hover:shadow-md hover:-translate-y-0.5 hover:text-rose-500 text-slate-500 font-medium text-sm px-3.5 py-2.5 rounded-xl shadow-sm transition-all active:scale-[0.98]"
+              className="inline-flex items-center gap-2 bg-white/[0.07] border border-white/10 hover:bg-white/[0.12] hover:shadow-md hover:-translate-y-0.5 hover:text-rose-400 text-white/50 font-medium text-sm px-3.5 py-2.5 rounded-xl transition-all active:scale-[0.98]"
               title="Sign out"
             >
               <IconLogout />
@@ -826,14 +832,14 @@ export default function DashboardClient({
         {/* Stats bar */}
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
           {[
-            { label: "Active",       count: counts.active,             color: "text-indigo-500",  ring: "from-indigo-400/20" },
-            { label: "Needs Review", count: counts.pending_review,     color: "text-amber-500",   ring: "from-amber-400/20" },
-            { label: "Revision",     count: counts.revision_requested, color: "text-orange-500",  ring: "from-orange-400/20" },
-            { label: "Done",         count: counts.completed,          color: "text-emerald-500", ring: "from-emerald-400/20" },
-            { label: "Escalated",    count: counts.escalated,          color: "text-rose-500",    ring: "from-rose-400/20" },
+            { label: "Active",       count: counts.active,             color: "text-indigo-400",  glow: "bg-indigo-500/10" },
+            { label: "Needs Review", count: counts.pending_review,     color: "text-amber-400",   glow: "bg-amber-500/10" },
+            { label: "Revision",     count: counts.revision_requested, color: "text-orange-400",  glow: "bg-orange-500/10" },
+            { label: "Done",         count: counts.completed,          color: "text-emerald-400", glow: "bg-emerald-500/10" },
+            { label: "Escalated",    count: counts.escalated,          color: "text-rose-400",    glow: "bg-rose-500/10" },
           ].map((s, i) => (
-            <div key={s.label} className={`bg-white/70 backdrop-blur-xl rounded-2xl p-4 border border-white/90 shadow-md shadow-indigo-100/50 text-center bg-gradient-to-b ${s.ring} to-transparent anim-rise hover:-translate-y-0.5 hover:shadow-lg transition-all duration-200`} style={{ animationDelay: `${i * 60}ms` }}>
-              <p className="text-slate-400 text-xs mb-1">{s.label}</p>
+            <div key={s.label} className={`${s.glow} backdrop-blur-xl rounded-2xl p-4 border border-white/[0.07] shadow-md shadow-black/40 text-center anim-rise hover:-translate-y-0.5 hover:shadow-lg hover:border-white/[0.12] transition-all duration-200`} style={{ animationDelay: `${i * 60}ms` }}>
+              <p className="text-white/30 text-xs mb-1">{s.label}</p>
               <p className={`text-2xl font-bold ${s.color}`}>{s.count}</p>
             </div>
           ))}
@@ -847,14 +853,14 @@ export default function DashboardClient({
               onClick={() => setFilter(f.key)}
               className={`shrink-0 px-4 py-2 rounded-xl text-sm font-medium transition-all flex items-center gap-1.5 ${
                 filter === f.key
-                  ? "bg-slate-800 text-white shadow-md"
-                  : "bg-white/60 text-slate-500 hover:text-slate-700 hover:bg-white hover:shadow-md hover:-translate-y-0.5 border border-white/80"
+                  ? "bg-white/[0.12] text-white shadow-md border border-white/[0.15]"
+                  : "bg-white/[0.04] text-white/40 hover:text-white/70 hover:bg-white/[0.08] hover:shadow-md hover:-translate-y-0.5 border border-white/[0.06]"
               }`}
             >
               {f.label}
               {counts[f.key] > 0 && (
                 <span className={`text-xs px-1.5 py-0.5 rounded-full ${
-                  filter === f.key ? "bg-white/20 text-white" : "bg-slate-100 text-slate-400"
+                  filter === f.key ? "bg-white/20 text-white" : "bg-white/[0.08] text-white/40"
                 }`}>
                   {counts[f.key]}
                 </span>
@@ -869,7 +875,7 @@ export default function DashboardClient({
         {/* Task list */}
         <div className="space-y-3">
           {visible.length === 0 && (
-            <div className="text-center text-slate-400 py-16 bg-white/50 backdrop-blur-xl rounded-2xl border border-white/80">
+            <div className="text-center text-white/30 py-16 bg-white/[0.03] backdrop-blur-xl rounded-2xl border border-white/[0.06]">
               {filter === "all" ? "No tasks yet. Create one above!" : `No ${filter.replace(/_/g, " ")} tasks.`}
             </div>
           )}
