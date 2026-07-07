@@ -262,13 +262,14 @@ function CommentBubble({ c, userMap }: { c: TaskComment; userMap: Record<string,
 
 // ── Task Card ───────────────────────────────────────────────────────────────
 
-function TaskCard({ task, expanded, onToggle, onAction, userMap, accentColor }: {
+function TaskCard({ task, expanded, onToggle, onAction, userMap, accentColor, lastReadAt }: {
   task: TaskWithComments;
   expanded: boolean;
   onToggle: () => void;
   onAction: (taskId: string, action: TaskAction, content?: string) => Promise<void>;
   userMap: Record<string, string>;
   accentColor?: string;
+  lastReadAt?: number;
 }) {
   const [revisionText, setRevisionText] = useState("");
   const [messageText, setMessageText] = useState("");
@@ -309,8 +310,11 @@ function TaskCard({ task, expanded, onToggle, onAction, userMap, accentColor }: 
   );
   const followupsLeft = task.max_followups - task.followup_count;
   const assigneeComments = (task.task_comments ?? []).filter(c => c.author_type === "assignee");
-  const replyCount = assigneeComments.length;
-  const replyAuthors = [...new Set(assigneeComments.map(c => c.author_name))];
+  const unreadComments = lastReadAt
+    ? assigneeComments.filter(c => new Date(c.created_at).getTime() > lastReadAt)
+    : assigneeComments;
+  const replyCount = unreadComments.length;
+  const replyAuthors = [...new Set(unreadComments.map(c => c.author_name))];
 
   return (
     <div
@@ -478,12 +482,13 @@ function TaskCard({ task, expanded, onToggle, onAction, userMap, accentColor }: 
 
 type EmpLocalState = { filter: string; sort: SortBy };
 
-function EmployeeView({ tasks, expandedId, onToggle, onAction, userMap }: {
+function EmployeeView({ tasks, expandedId, onToggle, onAction, userMap, readState }: {
   tasks: TaskWithComments[];
   expandedId: string | null;
   onToggle: (id: string) => void;
   onAction: (taskId: string, action: TaskAction, content?: string) => Promise<void>;
   userMap: Record<string, string>;
+  readState: Record<string, number>;
 }) {
   const [empState, setEmpState] = useState<Record<string, EmpLocalState>>({});
 
@@ -641,7 +646,7 @@ function EmployeeView({ tasks, expandedId, onToggle, onAction, userMap }: {
                   No {empFilter !== "all" ? empFilter.replace(/_/g, " ") + " " : ""}tasks for {name}.
                 </p>
               ) : sortedTasks.map(task => (
-                <TaskCard key={task.id} task={task} expanded={expandedId === task.id} onToggle={() => onToggle(task.id)} onAction={onAction} userMap={userMap} accentColor={color} />
+                <TaskCard key={task.id} task={task} expanded={expandedId === task.id} onToggle={() => onToggle(task.id)} onAction={onAction} userMap={userMap} accentColor={color} lastReadAt={readState[task.id]} />
               ))}
             </div>
           </div>
@@ -951,7 +956,24 @@ export default function DashboardClient({ initialTasks, userEmail }: {
   const [toasts, setToasts] = useState<ToastType[]>([]);
   const [users, setUsers] = useState<SlackUser[]>([]);
   const [userMap, setUserMap] = useState<Record<string, string>>({});
+  const [readState, setReadState] = useState<Record<string, number>>({});
   const toastIdRef = useRef(0);
+
+  // Load read-state from localStorage on mount
+  useEffect(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem("task-read-state") ?? "{}");
+      setReadState(stored);
+    } catch {}
+  }, []);
+
+  const markRead = useCallback((taskId: string) => {
+    setReadState(prev => {
+      const next = { ...prev, [taskId]: Date.now() };
+      try { localStorage.setItem("task-read-state", JSON.stringify(next)); } catch {}
+      return next;
+    });
+  }, []);
 
   // Load users for mention resolution and modal
   useEffect(() => {
@@ -1163,7 +1185,7 @@ export default function DashboardClient({ initialTasks, userEmail }: {
 
         {/* Task list or employee view */}
         {isEmployeeView ? (
-          <EmployeeView tasks={filteredTasks} expandedId={expandedId} onToggle={id => setExpandedId(expandedId === id ? null : id)} onAction={handleAction} userMap={userMap} />
+          <EmployeeView tasks={filteredTasks} expandedId={expandedId} onToggle={id => { const next = expandedId === id ? null : id; setExpandedId(next); if (next) markRead(next); }} onAction={handleAction} userMap={userMap} readState={readState} />
         ) : (
           <div className="space-y-3">
             {visible.length === 0 && (
@@ -1176,10 +1198,11 @@ export default function DashboardClient({ initialTasks, userEmail }: {
                 <TaskCard
                   task={task}
                   expanded={expandedId === task.id}
-                  onToggle={() => setExpandedId(expandedId === task.id ? null : task.id)}
+                  onToggle={() => { const next = expandedId === task.id ? null : task.id; setExpandedId(next); if (next) markRead(next); }}
                   onAction={handleAction}
                   userMap={userMap}
                   accentColor={getEmployeeColor(task.assigned_to_name)}
+                  lastReadAt={readState[task.id]}
                 />
               </div>
             ))}
