@@ -14,6 +14,26 @@ type SortBy = "status" | "date_desc" | "date_asc";
 
 const GRADIENT_BG = "linear-gradient(180deg, #060d24 0%, #0d2f7a 28%, #1565c0 56%, #1e88e5 76%, #42a5f5 100%)";
 
+// Deterministic per-employee color palette — stable across renders
+const EMP_PALETTE = [
+  "#34d399", // emerald
+  "#a78bfa", // violet
+  "#f472b6", // pink
+  "#fbbf24", // amber
+  "#22d3ee", // cyan
+  "#fb923c", // orange
+  "#2dd4bf", // teal
+  "#818cf8", // indigo
+  "#f87171", // red
+  "#4ade80", // green
+];
+
+function getEmployeeColor(name: string): string {
+  let h = 0;
+  for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) | 0;
+  return EMP_PALETTE[Math.abs(h) % EMP_PALETTE.length];
+}
+
 const STATUS = {
   active:             { label: "Active",        badge: "bg-blue-400/20 text-blue-200 border-blue-400/30",       dot: "bg-blue-300" },
   pending_review:     { label: "Needs Review",  badge: "bg-amber-400/20 text-amber-200 border-amber-400/30",    dot: "bg-amber-300" },
@@ -233,12 +253,13 @@ function CommentBubble({ c, userMap }: { c: TaskComment; userMap: Record<string,
 
 // ── Task Card ───────────────────────────────────────────────────────────────
 
-function TaskCard({ task, expanded, onToggle, onAction, userMap }: {
+function TaskCard({ task, expanded, onToggle, onAction, userMap, accentColor }: {
   task: TaskWithComments;
   expanded: boolean;
   onToggle: () => void;
   onAction: (taskId: string, action: TaskAction, content?: string) => Promise<void>;
   userMap: Record<string, string>;
+  accentColor?: string;
 }) {
   const [revisionText, setRevisionText] = useState("");
   const [messageText, setMessageText] = useState("");
@@ -276,11 +297,14 @@ function TaskCard({ task, expanded, onToggle, onAction, userMap }: {
   const followupsLeft = task.max_followups - task.followup_count;
 
   return (
-    <div className={`rounded-2xl border transition-all duration-200 ${GLASS} ${
-      isPendingReview
-        ? "border-amber-400/40 shadow-lg shadow-amber-500/10 ring-1 ring-amber-400/20"
-        : `${GLASS_HOVER} hover:shadow-lg hover:shadow-black/20`
-    }`}>
+    <div
+      className={`rounded-2xl border transition-all duration-200 ${GLASS} ${
+        isPendingReview
+          ? "border-amber-400/40 shadow-lg shadow-amber-500/10 ring-1 ring-amber-400/20"
+          : `${GLASS_HOVER} hover:shadow-lg hover:shadow-black/20`
+      }`}
+      style={accentColor ? { borderLeft: `3px solid ${accentColor}80` } : undefined}
+    >
       {confirm === "cancel" && (
         <ConfirmDialog title="Cancel this task?" body={`${assigneeDisplay} will be notified in Slack that the task is cancelled, and all follow-ups will stop.`} confirmLabel="Yes, cancel task" danger onConfirm={() => handle("cancel")} onClose={() => setConfirm(null)} />
       )}
@@ -309,9 +333,10 @@ function TaskCard({ task, expanded, onToggle, onAction, userMap }: {
             {isPendingReview && <span className="text-xs font-medium text-amber-300">Awaiting your review</span>}
           </div>
           <p className="font-medium text-white leading-snug">{task.task_text}</p>
-          <p className="text-sm text-white/55 mt-1">
+          <p className="text-sm text-white/55 mt-1 flex items-center gap-1.5 flex-wrap">
+            {accentColor && <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: accentColor }} />}
             <span className="text-white/85 font-medium">{assigneeDisplay}</span>
-            <span className="mx-1 text-white/30">·</span>
+            <span className="text-white/30">·</span>
             assigned by {task.assigned_by_name}
           </p>
           <p className="text-xs text-white/35 mt-0.5">{formatDate(task.created_at)} · {timeAgo(task.created_at)}</p>
@@ -463,6 +488,7 @@ function EmployeeView({ tasks, sortBy, expandedId, onToggle, onAction, userMap }
   return (
     <div className="space-y-5">
       {employees.map(([name, empTasks]) => {
+        const color = getEmployeeColor(name);
         const total = empTasks.length;
         const active = empTasks.filter(t => t.status === "active").length;
         const pending = empTasks.filter(t => t.status === "pending_review").length;
@@ -478,16 +504,21 @@ function EmployeeView({ tasks, sortBy, expandedId, onToggle, onAction, userMap }
         const openTasks = active + pending + revision;
 
         return (
-          <div key={name} className={`rounded-2xl border ${GLASS} overflow-hidden`}>
+          <div key={name} className={`rounded-2xl border ${GLASS} overflow-hidden`}
+            style={{ borderColor: color + "50", borderLeftWidth: "4px", borderLeftColor: color }}>
             {/* Employee header */}
-            <div className="px-5 py-4 border-b border-white/15">
+            <div className="px-5 py-4 border-b border-white/15" style={{ background: color + "12" }}>
               <div className="flex items-start justify-between gap-4 flex-wrap">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-white/20 border border-white/30 flex items-center justify-center font-bold text-white text-base shadow-lg">
+                  <div className="w-10 h-10 rounded-full border-2 flex items-center justify-center font-bold text-white text-base shadow-lg"
+                    style={{ background: color + "40", borderColor: color + "70" }}>
                     {name.charAt(0).toUpperCase()}
                   </div>
                   <div>
-                    <h3 className="font-bold text-white text-base">{name}</h3>
+                    <h3 className="font-bold text-white text-base flex items-center gap-2">
+                      {name}
+                      <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: color }} />
+                    </h3>
                     <p className="text-xs text-white/50">{total} task{total !== 1 ? "s" : ""} total</p>
                   </div>
                 </div>
@@ -508,8 +539,8 @@ function EmployeeView({ tasks, sortBy, expandedId, onToggle, onAction, userMap }
                 <div className="bg-white/[0.08] rounded-xl px-3 py-2.5 border border-white/10">
                   <p className="text-white/40 text-xs mb-0.5">Completion Rate</p>
                   <p className="text-white font-bold text-lg leading-none">{completionRate}%</p>
-                  <div className="mt-2">
-                    <ProdBar pct={completionRate} color={completionRate >= 75 ? "bg-emerald-400" : completionRate >= 40 ? "bg-amber-400" : "bg-rose-400"} />
+                  <div className="mt-2 h-1.5 rounded-full bg-white/15 overflow-hidden">
+                    <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(completionRate, 100)}%`, backgroundColor: color }} />
                   </div>
                 </div>
                 <div className="bg-white/[0.08] rounded-xl px-3 py-2.5 border border-white/10">
@@ -530,10 +561,10 @@ function EmployeeView({ tasks, sortBy, expandedId, onToggle, onAction, userMap }
               </div>
             </div>
 
-            {/* Task list */}
+            {/* Task list — each card gets the employee accent color */}
             <div className="p-4 space-y-2">
               {applySort(empTasks, sortBy).map(task => (
-                <TaskCard key={task.id} task={task} expanded={expandedId === task.id} onToggle={() => onToggle(task.id)} onAction={onAction} userMap={userMap} />
+                <TaskCard key={task.id} task={task} expanded={expandedId === task.id} onToggle={() => onToggle(task.id)} onAction={onAction} userMap={userMap} accentColor={color} />
               ))}
             </div>
           </div>
@@ -567,18 +598,39 @@ function NewTaskModal({ onClose, onCreated, toast, initialUsers }: {
   }
   function addFollowup() { setFollowups(prev => [...prev, ""]); }
   function removeFollowup(i: number) { setFollowups(prev => prev.filter((_, idx) => idx !== i)); }
-  function setFollowupAt(i: number, val: string) { setFollowups(prev => { const n = [...prev]; n[i] = val; return n; }); }
+  function setFollowupAt(i: number, val: string) {
+    setFollowups(prev => { const n = [...prev]; n[i] = val; return n; });
+  }
+  // Sort followups chronologically when user leaves an input (onBlur)
+  function sortFollowups() {
+    setFollowups(prev => {
+      const filled = prev.filter(f => f.trim()).sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+      const empty = prev.filter(f => !f.trim());
+      return [...filled, ...empty];
+    });
+  }
 
   const dueMs = dueDateMode === "custom" && dueDateVal ? new Date(dueDateVal).getTime() : null;
-  const followupWarnings = followups.map(f => !f || !dueMs ? false : new Date(f).getTime() > dueMs);
-  const hasWarning = followupWarnings.some(Boolean);
+  // Warn if any followup is after due date
+  const afterDueWarnings = followups.map(f => !f || !dueMs ? false : new Date(f).getTime() > dueMs);
+  // Warn if followups are out of chronological order
+  const outOfOrderWarnings = followups.map((f, i) => {
+    if (!f || i === 0) return false;
+    const prev = followups[i - 1];
+    if (!prev) return false;
+    return new Date(f).getTime() < new Date(prev).getTime();
+  });
+  const hasWarning = afterDueWarnings.some(Boolean) || outOfOrderWarnings.some(Boolean);
   const filledFollowups = followups.filter(f => f.trim());
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!selectedIds.length || !taskText.trim() || hasWarning || filledFollowups.length === 0) return;
     const selectedUsers = selectedIds.map(id => users.find(u => u.id === id)!).filter(Boolean);
-    const followupSchedule = filledFollowups.map(f => new Date(f).toISOString());
+    // Always sort chronologically before submitting
+    const followupSchedule = filledFollowups
+      .sort((a, b) => new Date(a).getTime() - new Date(b).getTime())
+      .map(f => new Date(f).toISOString());
     const dueDate = dueDateMode === "custom" && dueDateVal ? new Date(dueDateVal).toISOString() : null;
     setSubmitting(true);
     try {
@@ -669,24 +721,36 @@ function NewTaskModal({ onClose, onCreated, toast, initialUsers }: {
           <div>
             <label className="block text-sm font-medium text-white/70 mb-2">Follow-up schedule</label>
             <div className="space-y-2">
-              {followups.map((f, i) => (
-                <div key={i} className="flex gap-2 items-end">
-                  <div className="flex-1">
-                    <p className="text-xs text-white/40 mb-1">
-                      {i === 0 ? "1st" : i === 1 ? "2nd" : i === 2 ? "3rd" : `${i + 1}th`} Follow-up
-                      {followupWarnings[i] && <span className="text-rose-300 ml-2">⚠ After due date</span>}
-                    </p>
-                    <input type="datetime-local" value={f} onChange={e => setFollowupAt(i, e.target.value)}
-                      className={`${INPUT_CLS} ${followupWarnings[i] ? "border-rose-400/50" : ""}`} />
+              {followups.map((f, i) => {
+                const isAfterDue = afterDueWarnings[i];
+                const isOutOfOrder = outOfOrderWarnings[i];
+                const hasFieldWarning = isAfterDue || isOutOfOrder;
+                const ordinal = ["1st","2nd","3rd"][i] ?? `${i + 1}th`;
+                return (
+                  <div key={i} className="flex gap-2 items-end">
+                    <div className="flex-1">
+                      <p className="text-xs text-white/40 mb-1 flex items-center gap-2">
+                        <span>{ordinal} Follow-up</span>
+                        {isAfterDue && <span className="text-rose-300">⚠ After due date</span>}
+                        {isOutOfOrder && !isAfterDue && <span className="text-amber-300">⚠ Earlier than previous — will auto-sort on blur</span>}
+                      </p>
+                      <input
+                        type="datetime-local"
+                        value={f}
+                        onChange={e => setFollowupAt(i, e.target.value)}
+                        onBlur={sortFollowups}
+                        className={`${INPUT_CLS} ${hasFieldWarning ? "border-rose-400/50" : ""}`}
+                      />
+                    </div>
+                    {followups.length > 1 && (
+                      <button type="button" onClick={() => removeFollowup(i)}
+                        className="w-9 h-9 rounded-lg bg-rose-500/15 border border-rose-400/20 text-rose-300 hover:bg-rose-500/25 flex items-center justify-center transition-all shrink-0">
+                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+                      </button>
+                    )}
                   </div>
-                  {followups.length > 1 && (
-                    <button type="button" onClick={() => removeFollowup(i)}
-                      className="w-9 h-9 rounded-lg bg-rose-500/15 border border-rose-400/20 text-rose-300 hover:bg-rose-500/25 flex items-center justify-center transition-all shrink-0">
-                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
-                    </button>
-                  )}
-                </div>
-              ))}
+                );
+              })}
               <button type="button" onClick={addFollowup}
                 className="inline-flex items-center gap-1.5 text-xs text-white/65 hover:text-white bg-white/8 border border-white/15 hover:border-white/25 px-3 py-1.5 rounded-lg transition-all">
                 <IconPlus /> Add follow-up
@@ -938,7 +1002,14 @@ export default function DashboardClient({ initialTasks, userEmail }: {
             )}
             {visible.map((task, i) => (
               <div key={task.id} className="anim-rise" style={{ animationDelay: `${Math.min(i, 8) * 50}ms` }}>
-                <TaskCard task={task} expanded={expandedId === task.id} onToggle={() => setExpandedId(expandedId === task.id ? null : task.id)} onAction={handleAction} userMap={userMap} />
+                <TaskCard
+                  task={task}
+                  expanded={expandedId === task.id}
+                  onToggle={() => setExpandedId(expandedId === task.id ? null : task.id)}
+                  onAction={handleAction}
+                  userMap={userMap}
+                  accentColor={getEmployeeColor(task.assigned_to_name)}
+                />
               </div>
             ))}
           </div>

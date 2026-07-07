@@ -88,11 +88,27 @@ export async function POST(request: Request) {
   const mentions = ids.map(id => `<@${id}>`).join(" ");
   const nameList = names.join(", ");
 
-  // Post the initial task message with blue stripe
+  // Sort followup schedule chronologically (earliest first) before storing
+  const sortedFollowupSchedule = followupSchedule?.length
+    ? [...followupSchedule].sort((a, b) => new Date(a).getTime() - new Date(b).getTime())
+    : null;
+
+  // Recalculate next followup from sorted schedule
+  if (sortedFollowupSchedule?.length) {
+    nextFollowupAt = new Date(sortedFollowupSchedule[0]);
+  }
+
+  const dueDateLabel = dueDate
+    ? new Date(dueDate).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hour12: true })
+    : null;
+
+  // Post the initial task message — content only in attachment (prevents doubling)
   const slack = getSlackClient();
   const slackResult = await slack.chat.postMessage({
     channel: channelId,
-    text: `${mentions} ${brandonName} has assigned you a task:\n> ${taskText.trim()}\n\nReply *"done"* in this thread when you've completed it.`,
+    // text is the plain-text notification fallback (mobile push, desktop banner).
+    // Keep it concise so it doesn't render as a duplicate line in the channel.
+    text: `📋 ${brandonName} assigned a task to ${nameList}: ${taskText.trim()}`,
     attachments: [
       {
         color: "#3B82F6",
@@ -101,7 +117,7 @@ export async function POST(request: Request) {
             type: "section",
             text: {
               type: "mrkdwn",
-              text: `*New task assigned* by ${brandonName}\n\n${mentions}\n\n> ${taskText.trim()}`,
+              text: `*New task assigned* by ${brandonName}\n*Assigned to:* ${mentions}\n\n*${taskText.trim()}*`,
             },
           },
           {
@@ -109,7 +125,7 @@ export async function POST(request: Request) {
             elements: [
               {
                 type: "mrkdwn",
-                text: `Reply *"done"* when complete${dueDate ? ` · Due: ${new Date(dueDate).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hour12: true })}` : ""}`,
+                text: `Reply *"done"* in this thread when complete${dueDateLabel ? ` · Due: ${dueDateLabel}` : ""}`,
               },
             ],
           },
@@ -141,8 +157,8 @@ export async function POST(request: Request) {
       thread_ts: messageTs,
       status: "active",
       followup_count: 0,
-      max_followups: followupSchedule ? followupSchedule.length : 5,
-      followup_schedule: followupSchedule ?? null,
+      max_followups: sortedFollowupSchedule ? sortedFollowupSchedule.length : 5,
+      followup_schedule: sortedFollowupSchedule ?? null,
       due_date: dueDate ?? null,
       next_followup_at: nextFollowupAt?.toISOString() ?? null,
     })
