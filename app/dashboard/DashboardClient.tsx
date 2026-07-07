@@ -476,14 +476,27 @@ function TaskCard({ task, expanded, onToggle, onAction, userMap, accentColor }: 
 
 // ── Employee view ─────────────────────────────────────────────────────────────
 
-function EmployeeView({ tasks, sortBy, expandedId, onToggle, onAction, userMap }: {
+type EmpLocalState = { filter: string; sort: SortBy };
+
+function EmployeeView({ tasks, expandedId, onToggle, onAction, userMap }: {
   tasks: TaskWithComments[];
-  sortBy: SortBy;
   expandedId: string | null;
   onToggle: (id: string) => void;
   onAction: (taskId: string, action: TaskAction, content?: string) => Promise<void>;
   userMap: Record<string, string>;
 }) {
+  const [empState, setEmpState] = useState<Record<string, EmpLocalState>>({});
+
+  function getEmpState(name: string): EmpLocalState {
+    return empState[name] ?? { filter: "all", sort: "status" };
+  }
+  function setEmpFilter(name: string, filter: string) {
+    setEmpState(prev => ({ ...prev, [name]: { ...getEmpState(name), filter } }));
+  }
+  function setEmpSort(name: string, sort: SortBy) {
+    setEmpState(prev => ({ ...prev, [name]: { ...getEmpState(name), sort } }));
+  }
+
   const grouped = groupByEmployee(tasks);
   const employees = Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b));
 
@@ -499,6 +512,8 @@ function EmployeeView({ tasks, sortBy, expandedId, onToggle, onAction, userMap }
     <div className="space-y-5">
       {employees.map(([name, empTasks]) => {
         const color = getEmployeeColor(name);
+        const { filter: empFilter, sort: empSort } = getEmpState(name);
+
         const total = empTasks.length;
         const active = empTasks.filter(t => t.status === "active").length;
         const pending = empTasks.filter(t => t.status === "pending_review").length;
@@ -512,6 +527,10 @@ function EmployeeView({ tasks, sortBy, expandedId, onToggle, onAction, userMap }
           ? (completedTasks.reduce((s, t) => s + t.followup_count, 0) / completedTasks.length).toFixed(1)
           : "—";
         const openTasks = active + pending + revision;
+
+        const empCounts: Record<string, number> = { all: total, active, pending_review: pending, revision_requested: revision, completed: done, escalated, cancelled };
+        const visibleTasks = empFilter === "all" ? empTasks : empTasks.filter(t => t.status === empFilter);
+        const sortedTasks = applySort(visibleTasks, empSort);
 
         return (
           <div key={name} className={`rounded-2xl ${CARD} overflow-hidden`}
@@ -571,9 +590,57 @@ function EmployeeView({ tasks, sortBy, expandedId, onToggle, onAction, userMap }
               </div>
             </div>
 
-            {/* Task list — each card gets the employee accent color */}
+            {/* Per-employee filter + sort bar */}
+            <div className="px-4 py-2.5 border-b border-slate-100 bg-white flex flex-wrap items-center gap-2">
+              {/* Status filter pills — only show statuses that exist for this employee */}
+              <div className="flex gap-1 flex-wrap flex-1">
+                {FILTERS.map(f => {
+                  const cnt = empCounts[f.key] ?? 0;
+                  if (f.key !== "all" && cnt === 0) return null;
+                  const fc = FILTER_COLORS[f.key] ?? FILTER_COLORS.all;
+                  const isActive = empFilter === f.key;
+                  return (
+                    <button
+                      key={f.key}
+                      onClick={() => setEmpFilter(name, f.key)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-all flex items-center gap-1 ${
+                        isActive ? "bg-blue-600 border-blue-500 text-white shadow-sm" : fc.tab
+                      }`}
+                    >
+                      {f.label}
+                      {cnt > 0 && (
+                        <span className={`px-1 rounded-full text-xs ${isActive ? "bg-white/25 text-white" : fc.badge}`}>
+                          {cnt}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Sort controls */}
+              <div className="flex gap-1 shrink-0">
+                {([ ["status", "Status"], ["date_desc", "Newest"], ["date_asc", "Oldest"] ] as [SortBy, string][]).map(([k, l]) => (
+                  <button
+                    key={k}
+                    onClick={() => setEmpSort(name, k)}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-all ${
+                      empSort === k ? "bg-slate-700 border-slate-600 text-white" : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50 hover:border-slate-300"
+                    }`}
+                  >
+                    {l}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Task list */}
             <div className="p-4 space-y-2 bg-slate-50/60">
-              {applySort(empTasks, sortBy).map(task => (
+              {sortedTasks.length === 0 ? (
+                <p className="text-center text-sm text-slate-400 italic py-6">
+                  No {empFilter !== "all" ? empFilter.replace(/_/g, " ") + " " : ""}tasks for {name}.
+                </p>
+              ) : sortedTasks.map(task => (
                 <TaskCard key={task.id} task={task} expanded={expandedId === task.id} onToggle={() => onToggle(task.id)} onAction={onAction} userMap={userMap} accentColor={color} />
               ))}
             </div>
@@ -1096,7 +1163,7 @@ export default function DashboardClient({ initialTasks, userEmail }: {
 
         {/* Task list or employee view */}
         {isEmployeeView ? (
-          <EmployeeView tasks={filteredTasks} sortBy={sortBy} expandedId={expandedId} onToggle={id => setExpandedId(expandedId === id ? null : id)} onAction={handleAction} userMap={userMap} />
+          <EmployeeView tasks={filteredTasks} expandedId={expandedId} onToggle={id => setExpandedId(expandedId === id ? null : id)} onAction={handleAction} userMap={userMap} />
         ) : (
           <div className="space-y-3">
             {visible.length === 0 && (
