@@ -14,6 +14,8 @@ export interface Task {
   raw_message: string;
   assigned_to_id: string;
   assigned_to_name: string;
+  assignee_ids: string[];
+  assignee_names: string[];
   assigned_by_id: string;
   assigned_by_name: string;
   channel_id: string;
@@ -22,6 +24,8 @@ export interface Task {
   status: "active" | "pending_review" | "revision_requested" | "completed" | "escalated" | "cancelled";
   followup_count: number;
   max_followups: number;
+  followup_schedule: string[] | null;
+  due_date: string | null;
   next_followup_at: string | null;
   last_followup_at: string | null;
   completed_at: string | null;

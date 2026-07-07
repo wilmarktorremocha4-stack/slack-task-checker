@@ -208,7 +208,8 @@ async function handleThreadReply(
     return;
   }
 
-  const isAssignee = userId === task.assigned_to_id;
+  const assigneeIds: string[] = task.assignee_ids?.length ? task.assignee_ids : [task.assigned_to_id];
+  const isAssignee = assigneeIds.includes(userId);
   const isOpen = task.status === "active" || task.status === "revision_requested";
 
   // Closed or under-review tasks: just log the reply for dashboard visibility
@@ -247,7 +248,7 @@ async function handleThreadReply(
     await postThreadReply(
       task.channel_id,
       task.thread_ts,
-      `Got it ${task.assigned_to_name}! I've flagged this for ${task.assigned_by_name}'s review. Follow-ups are paused while they check your work.`
+      `Got it! I've flagged this for ${task.assigned_by_name}'s review. Follow-ups are paused while they check your work.`
     );
 
     await supabase.from("task_comments").insert([

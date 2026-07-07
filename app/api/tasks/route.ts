@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdmin } from "@/lib/supabase";
-import { getSlackClient, getSlackUserName } from "@/lib/slack";
+import { getSlackClient, getSlackUserName, postColoredMessage } from "@/lib/slack";
 import { calculateNextFollowupAt } from "@/lib/followup-schedule";
 
 export const runtime = "nodejs";
@@ -45,13 +45,32 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const body = await request.json();
-  const { assigneeId, assigneeName, taskText } = body as {
-    assigneeId: string;
-    assigneeName: string;
+  const {
+    assigneeIds,
+    assigneeNames,
+    taskText,
+    followupSchedule,
+    noFollowup,
+    dueDate,
+    // legacy single-assignee fields (Slack events path)
+    assigneeId,
+    assigneeName,
+  } = body as {
+    assigneeIds?: string[];
+    assigneeNames?: string[];
     taskText: string;
+    followupSchedule?: string[] | null;
+    noFollowup?: boolean;
+    dueDate?: string | null;
+    assigneeId?: string;
+    assigneeName?: string;
   };
 
-  if (!assigneeId || !assigneeName || !taskText?.trim()) {
+  // Normalise to arrays (support both single and multi-assignee)
+  const ids: string[] = assigneeIds?.length ? assigneeIds : assigneeId ? [assigneeId] : [];
+  const names: string[] = assigneeNames?.length ? assigneeNames : assigneeName ? [assigneeName] : [];
+
+  if (!ids.length || !names.length || !taskText?.trim()) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
   }
 
@@ -60,11 +79,85 @@ export async function POST(request: Request) {
 
   const brandonName = await getSlackUserName(brandonUserId);
 
+  // Determine next follow-up time (null when noFollowup is set)
+  let nextFollowupAt: Date | null = null;
+  if (!noFollowup) {
+    if (followupSchedule && followupSchedule.length > 0) {
+      nextFollowupAt = new Date(followupSchedule[0]);
+    } else {
+      nextFollowupAt = calculateNextFollowupAt(0);
+    }
+  }
+
+  const mentions = ids.map(id => `<@${id}>`).join(" ");
+  const nameList = names.join(", ");
+
+  // Sort followup schedule chronologically (earliest first) before storing
+  const sortedFollowupSchedule = followupSchedule?.length
+    ? [...followupSchedule].sort((a, b) => new Date(a).getTime() - new Date(b).getTime())
+    : null;
+
+  // Server-side guard: no follow-up or due date may be in the past (60s grace)
+  const cutoff = Date.now() - 60_000;
+  if (sortedFollowupSchedule?.some(f => new Date(f).getTime() < cutoff)) {
+    return NextResponse.json(
+      { error: "Follow-up dates must be in the future" },
+      { status: 400 }
+    );
+  }
+  if (dueDate && new Date(dueDate).getTime() < cutoff) {
+    return NextResponse.json(
+      { error: "Due date must be in the future" },
+      { status: 400 }
+    );
+  }
+  // Guard: no follow-up may be after the due date
+  if (dueDate && sortedFollowupSchedule?.some(f => new Date(f).getTime() > new Date(dueDate).getTime())) {
+    return NextResponse.json(
+      { error: "Follow-ups cannot be scheduled after the due date" },
+      { status: 400 }
+    );
+  }
+
+  // Recalculate next followup from sorted schedule (skip when noFollowup)
+  if (!noFollowup && sortedFollowupSchedule?.length) {
+    nextFollowupAt = new Date(sortedFollowupSchedule[0]);
+  }
+
+  const dueDateLabel = dueDate
+    ? new Date(dueDate).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hour12: true })
+    : null;
+
+  // Post the initial task message. No top-level `text`: Slack renders it in
+  // ADDITION to attachments (doubling the message). The attachment `fallback`
+  // covers push/desktop notifications instead.
   const slack = getSlackClient();
   const slackResult = await slack.chat.postMessage({
     channel: channelId,
-    text: `<@${assigneeId}> ${brandonName} has assigned you a task:\n> ${taskText.trim()}\n\nReply *"done"* in this thread when you've completed it.`,
-    mrkdwn: true,
+    attachments: [
+      {
+        color: "#3B82F6",
+        fallback: `📋 ${brandonName} assigned a task to ${nameList}: ${taskText.trim()}`,
+        blocks: [
+          {
+            type: "section",
+            text: {
+              type: "mrkdwn",
+              text: `*New task assigned* by ${brandonName}\n*Assigned to:* ${mentions}\n\n*${taskText.trim()}*`,
+            },
+          },
+          {
+            type: "context",
+            elements: [
+              {
+                type: "mrkdwn",
+                text: `Reply *"done"* in this thread when complete${dueDateLabel ? ` · Due: ${dueDateLabel}` : ""}`,
+              },
+            ],
+          },
+        ],
+      },
+    ],
   });
 
   if (!slackResult.ok || !slackResult.ts) {
@@ -72,7 +165,6 @@ export async function POST(request: Request) {
   }
 
   const messageTs = slackResult.ts;
-  const nextFollowupAt = calculateNextFollowupAt(0);
   const supabase = createSupabaseAdmin();
 
   const { data: task, error } = await supabase
@@ -80,8 +172,10 @@ export async function POST(request: Request) {
     .insert({
       task_text: taskText.trim(),
       raw_message: taskText.trim(),
-      assigned_to_id: assigneeId,
-      assigned_to_name: assigneeName,
+      assigned_to_id: ids[0],
+      assigned_to_name: names[0],
+      assignee_ids: ids,
+      assignee_names: names,
       assigned_by_id: brandonUserId,
       assigned_by_name: brandonName,
       channel_id: channelId,
@@ -89,7 +183,9 @@ export async function POST(request: Request) {
       thread_ts: messageTs,
       status: "active",
       followup_count: 0,
-      max_followups: 5,
+      max_followups: noFollowup ? 0 : (sortedFollowupSchedule ? sortedFollowupSchedule.length : 5),
+      followup_schedule: sortedFollowupSchedule ?? null,
+      due_date: dueDate ?? null,
       next_followup_at: nextFollowupAt?.toISOString() ?? null,
     })
     .select()
@@ -103,7 +199,7 @@ export async function POST(request: Request) {
     task_id: task.id,
     author_type: "system",
     author_name: "System",
-    content: `Task created from dashboard by ${brandonName} and posted to Slack.`,
+    content: `Task assigned to ${nameList} by ${brandonName} and posted to Slack.`,
     sent_to_slack: false,
   });
 

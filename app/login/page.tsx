@@ -7,6 +7,18 @@ import { isAllowedEmail } from "@/lib/auth";
 
 type Mode = "signin" | "signup" | "forgot";
 
+function Spinner() {
+  return (
+    <svg className="w-4 h-4 anim-spin-slow" viewBox="0 0 24 24" fill="none">
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+    </svg>
+  );
+}
+
+const INPUT_CLS =
+  "w-full bg-white/[0.07] border border-white/10 rounded-xl px-4 py-3 text-sm text-white/80 placeholder-white/25 hover:border-white/20 focus:outline-none focus:ring-2 focus:ring-indigo-400/30 focus:border-indigo-400/40 transition-all";
+
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -38,58 +50,29 @@ function LoginForm() {
     try {
       if (mode === "signin") {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) {
-          setMessage({ text: error.message, ok: false });
-        } else {
-          router.push("/dashboard");
-          router.refresh();
-          return;
-        }
+        if (error) { setMessage({ text: error.message, ok: false }); }
+        else { router.push("/dashboard"); router.refresh(); return; }
       } else if (mode === "signup") {
-        if (password.length < 8) {
-          setMessage({ text: "Password must be at least 8 characters.", ok: false });
-        } else if (password !== confirmPassword) {
-          setMessage({ text: "Passwords do not match.", ok: false });
-        } else {
-          const { error } = await supabase.auth.signUp({
-            email,
-            password,
-            options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
-          });
-          if (error) {
-            setMessage({ text: error.message, ok: false });
-          } else {
-            setMessage({
-              text: "Account created! Check your inbox for a verification link before signing in.",
-              ok: true,
-            });
-            setMode("signin");
-          }
+        if (password.length < 8) { setMessage({ text: "Password must be at least 8 characters.", ok: false }); }
+        else if (password !== confirmPassword) { setMessage({ text: "Passwords do not match.", ok: false }); }
+        else {
+          const { error } = await supabase.auth.signUp({ email, password, options: { emailRedirectTo: `${window.location.origin}/auth/callback` } });
+          if (error) { setMessage({ text: error.message, ok: false }); }
+          else { setMessage({ text: "Account created! Check your inbox for a verification link before signing in.", ok: true }); setMode("signin"); }
         }
       } else {
-        const { error } = await supabase.auth.resetPasswordForEmail(email, {
-          redirectTo: `${window.location.origin}/auth/callback?next=/reset-password`,
-        });
-        if (error) {
-          setMessage({ text: error.message, ok: false });
-        } else {
-          setMessage({
-            text: "If an account exists for this email, a password reset link has been sent. Check your inbox.",
-            ok: true,
-          });
-        }
+        const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: `${window.location.origin}/auth/callback?next=/reset-password` });
+        if (error) { setMessage({ text: error.message, ok: false }); }
+        else { setMessage({ text: "If an account exists for this email, a password reset link has been sent. Check your inbox.", ok: true }); }
       }
-    } catch {
-      setMessage({ text: "Something went wrong. Please try again.", ok: false });
-    } finally {
-      setBusy(false);
-    }
+    } catch { setMessage({ text: "Something went wrong. Please try again.", ok: false }); }
+    finally { setBusy(false); }
   }
 
   const titles: Record<Mode, { heading: string; cta: string }> = {
-    signin: { heading: "Welcome!", cta: "Sign In" },
-    signup: { heading: "Create your account", cta: "Create Account" },
-    forgot: { heading: "Reset your password", cta: "Send Reset Link" },
+    signin: { heading: "Welcome back", cta: "Sign In" },
+    signup: { heading: "Create account", cta: "Create Account" },
+    forgot: { heading: "Reset password", cta: "Send Reset Link" },
   };
 
   return (
@@ -99,30 +82,33 @@ function LoginForm() {
       <div className="pointer-events-none absolute -bottom-48 -right-32 w-[36rem] h-[36rem] rounded-full bg-indigo-700/15 blur-[120px]" />
       <div className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 rounded-full bg-violet-600/8 blur-[100px]" />
 
-      <div className="relative w-full max-w-md">
-        {/* Logo */}
+      <div className="relative w-full max-w-md anim-pop">
+        {/* Brand */}
         <div className="flex flex-col items-center mb-8">
           <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-2xl shadow-lg shadow-indigo-500/30 mb-4">
             ✅
           </div>
-          <h1 className="text-2xl font-bold text-white/90 tracking-tight">Task Tracker</h1>
-          <p className="text-white/30 text-sm mt-1">Internal Access Only</p>
+          <h1 className="text-4xl font-black tracking-tight text-white mb-1">
+            Task{" "}
+            <span className="bg-gradient-to-r from-blue-400 via-indigo-400 to-violet-400 bg-clip-text text-transparent">
+              Tracker
+            </span>
+          </h1>
+          <p className="text-white/30 text-sm font-medium">Internal Access Only</p>
         </div>
 
-        {/* Card */}
+        {/* Dark glass card */}
         <div className="bg-white/[0.05] backdrop-blur-xl border border-white/10 rounded-3xl shadow-2xl shadow-black/60 p-8">
-          <h2 className="text-3xl font-extrabold mb-6 text-center bg-gradient-to-r from-blue-400 via-indigo-400 to-violet-400 bg-clip-text text-transparent tracking-tight">
+          <h2 className="text-xl font-bold mb-6 text-center text-white/90 tracking-tight">
             {titles[mode].heading}
           </h2>
 
           {message && (
-            <div
-              className={`mb-5 px-4 py-3 rounded-xl text-sm border ${
-                message.ok
-                  ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
-                  : "bg-rose-500/10 border-rose-500/30 text-rose-300"
-              }`}
-            >
+            <div className={`mb-5 px-4 py-3 rounded-xl text-sm border ${
+              message.ok
+                ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
+                : "bg-rose-500/10 border-rose-500/30 text-rose-300"
+            }`}>
               {message.text}
             </div>
           )}
@@ -131,13 +117,9 @@ function LoginForm() {
             <div>
               <label className="block text-sm font-medium text-white/50 mb-1.5">Email</label>
               <input
-                type="email"
-                required
-                autoComplete="email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                placeholder="you@operationamz.com"
-                className="w-full bg-white/[0.07] border border-white/10 rounded-xl px-4 py-3 text-sm text-white/80 placeholder-white/25 hover:border-white/20 focus:outline-none focus:ring-2 focus:ring-indigo-400/30 focus:border-indigo-400/40 transition-all"
+                type="email" required autoComplete="email" value={email}
+                onChange={e => setEmail(e.target.value)} placeholder="you@operationamz.com"
+                className={INPUT_CLS}
               />
             </div>
 
@@ -145,13 +127,9 @@ function LoginForm() {
               <div>
                 <label className="block text-sm font-medium text-white/50 mb-1.5">Password</label>
                 <input
-                  type="password"
-                  required
-                  autoComplete={mode === "signup" ? "new-password" : "current-password"}
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full bg-white/[0.07] border border-white/10 rounded-xl px-4 py-3 text-sm text-white/80 placeholder-white/25 hover:border-white/20 focus:outline-none focus:ring-2 focus:ring-indigo-400/30 focus:border-indigo-400/40 transition-all"
+                  type="password" required autoComplete={mode === "signup" ? "new-password" : "current-password"}
+                  value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••"
+                  className={INPUT_CLS}
                 />
               </div>
             )}
@@ -160,34 +138,26 @@ function LoginForm() {
               <div>
                 <label className="block text-sm font-medium text-white/50 mb-1.5">Confirm password</label>
                 <input
-                  type="password"
-                  required
-                  autoComplete="new-password"
-                  value={confirmPassword}
-                  onChange={e => setConfirmPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full bg-white/[0.07] border border-white/10 rounded-xl px-4 py-3 text-sm text-white/80 placeholder-white/25 hover:border-white/20 focus:outline-none focus:ring-2 focus:ring-indigo-400/30 focus:border-indigo-400/40 transition-all"
+                  type="password" required autoComplete="new-password"
+                  value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} placeholder="••••••••"
+                  className={INPUT_CLS}
                 />
               </div>
             )}
 
             {mode === "signin" && (
               <div className="text-right">
-                <button
-                  type="button"
-                  onClick={() => { setMode("forgot"); setMessage(null); }}
-                  className="text-xs text-indigo-400 hover:text-indigo-300 hover:underline underline-offset-2 font-medium transition-colors"
-                >
+                <button type="button" onClick={() => { setMode("forgot"); setMessage(null); }} className="text-xs text-indigo-400 hover:text-indigo-300 hover:underline underline-offset-2 font-medium transition-colors">
                   Forgot password?
                 </button>
               </div>
             )}
 
             <button
-              type="submit"
-              disabled={busy}
-              className="w-full bg-gradient-to-r from-blue-500 via-indigo-500 to-violet-600 hover:from-blue-600 hover:via-indigo-600 hover:to-violet-700 hover:shadow-xl hover:shadow-indigo-500/30 hover:-translate-y-0.5 disabled:opacity-60 disabled:hover:translate-y-0 text-white font-semibold text-sm py-3.5 rounded-xl shadow-lg shadow-indigo-500/20 transition-all active:scale-[0.98]"
+              type="submit" disabled={busy}
+              className="w-full inline-flex items-center justify-center gap-2.5 bg-gradient-to-r from-blue-500 via-indigo-500 to-violet-600 hover:from-blue-600 hover:via-indigo-600 hover:to-violet-700 hover:-translate-y-0.5 disabled:opacity-60 disabled:hover:translate-y-0 text-white font-semibold text-sm py-3.5 rounded-xl shadow-lg shadow-indigo-500/20 transition-all active:scale-[0.98]"
             >
+              {busy && <Spinner />}
               {busy ? "Please wait..." : titles[mode].cta}
             </button>
           </form>
@@ -196,10 +166,7 @@ function LoginForm() {
             {mode === "signin" && (
               <>
                 No account yet?{" "}
-                <button
-                  onClick={() => { setMode("signup"); setMessage(null); }}
-                  className="text-indigo-400 hover:text-indigo-300 hover:underline underline-offset-2 font-semibold transition-colors"
-                >
+                <button onClick={() => { setMode("signup"); setMessage(null); }} className="text-indigo-400 hover:text-indigo-300 hover:underline underline-offset-2 font-semibold transition-colors">
                   Sign up
                 </button>
               </>
@@ -207,19 +174,13 @@ function LoginForm() {
             {mode === "signup" && (
               <>
                 Already have an account?{" "}
-                <button
-                  onClick={() => { setMode("signin"); setMessage(null); }}
-                  className="text-indigo-400 hover:text-indigo-300 hover:underline underline-offset-2 font-semibold transition-colors"
-                >
+                <button onClick={() => { setMode("signin"); setMessage(null); }} className="text-indigo-400 hover:text-indigo-300 hover:underline underline-offset-2 font-semibold transition-colors">
                   Sign in
                 </button>
               </>
             )}
             {mode === "forgot" && (
-              <button
-                onClick={() => { setMode("signin"); setMessage(null); }}
-                className="text-indigo-400 hover:text-indigo-300 hover:underline underline-offset-2 font-semibold transition-colors"
-              >
+              <button onClick={() => { setMode("signin"); setMessage(null); }} className="text-indigo-400 hover:text-indigo-300 hover:underline underline-offset-2 font-semibold transition-colors">
                 ← Back to sign in
               </button>
             )}
