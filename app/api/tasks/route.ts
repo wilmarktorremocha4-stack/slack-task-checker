@@ -93,6 +93,28 @@ export async function POST(request: Request) {
     ? [...followupSchedule].sort((a, b) => new Date(a).getTime() - new Date(b).getTime())
     : null;
 
+  // Server-side guard: no follow-up or due date may be in the past (60s grace)
+  const cutoff = Date.now() - 60_000;
+  if (sortedFollowupSchedule?.some(f => new Date(f).getTime() < cutoff)) {
+    return NextResponse.json(
+      { error: "Follow-up dates must be in the future" },
+      { status: 400 }
+    );
+  }
+  if (dueDate && new Date(dueDate).getTime() < cutoff) {
+    return NextResponse.json(
+      { error: "Due date must be in the future" },
+      { status: 400 }
+    );
+  }
+  // Guard: no follow-up may be after the due date
+  if (dueDate && sortedFollowupSchedule?.some(f => new Date(f).getTime() > new Date(dueDate).getTime())) {
+    return NextResponse.json(
+      { error: "Follow-ups cannot be scheduled after the due date" },
+      { status: 400 }
+    );
+  }
+
   // Recalculate next followup from sorted schedule
   if (sortedFollowupSchedule?.length) {
     nextFollowupAt = new Date(sortedFollowupSchedule[0]);
@@ -102,16 +124,16 @@ export async function POST(request: Request) {
     ? new Date(dueDate).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hour12: true })
     : null;
 
-  // Post the initial task message — content only in attachment (prevents doubling)
+  // Post the initial task message. No top-level `text`: Slack renders it in
+  // ADDITION to attachments (doubling the message). The attachment `fallback`
+  // covers push/desktop notifications instead.
   const slack = getSlackClient();
   const slackResult = await slack.chat.postMessage({
     channel: channelId,
-    // text is the plain-text notification fallback (mobile push, desktop banner).
-    // Keep it concise so it doesn't render as a duplicate line in the channel.
-    text: `📋 ${brandonName} assigned a task to ${nameList}: ${taskText.trim()}`,
     attachments: [
       {
         color: "#3B82F6",
+        fallback: `📋 ${brandonName} assigned a task to ${nameList}: ${taskText.trim()}`,
         blocks: [
           {
             type: "section",

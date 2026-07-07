@@ -562,6 +562,13 @@ function EmployeeView({ tasks, sortBy, expandedId, onToggle, onAction, userMap }
 
 // ── New Task Modal ──────────────────────────────────────────────────────────
 
+// Current local time formatted for datetime-local inputs (used as `min`)
+function nowLocalInput(): string {
+  const d = new Date();
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().slice(0, 16);
+}
+
 function NewTaskModal({ onClose, onCreated, toast, initialUsers }: {
   onClose: () => void; onCreated: () => void; toast: (msg: string, ok: boolean) => void;
   initialUsers: SlackUser[];
@@ -571,9 +578,12 @@ function NewTaskModal({ onClose, onCreated, toast, initialUsers }: {
   const [taskText, setTaskText] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [userSearch, setUserSearch] = useState("");
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [followups, setFollowups] = useState<string[]>([""]);
   const [dueDateMode, setDueDateMode] = useState<"open" | "custom">("open");
   const [dueDateVal, setDueDateVal] = useState("");
+  const minLocal = nowLocalInput();
 
   const filteredUsers = userSearch
     ? users.filter(u => u.name.toLowerCase().includes(userSearch.toLowerCase()))
@@ -581,6 +591,8 @@ function NewTaskModal({ onClose, onCreated, toast, initialUsers }: {
 
   function toggleUser(u: SlackUser) {
     setSelectedIds(prev => prev.includes(u.id) ? prev.filter(id => id !== u.id) : [...prev, u.id]);
+    setUserSearch("");
+    searchInputRef.current?.focus();
   }
   function addFollowup() { setFollowups(prev => [...prev, ""]); }
   function removeFollowup(i: number) { setFollowups(prev => prev.filter((_, idx) => idx !== i)); }
@@ -596,7 +608,10 @@ function NewTaskModal({ onClose, onCreated, toast, initialUsers }: {
     });
   }
 
+  const nowMs = Date.now();
   const dueMs = dueDateMode === "custom" && dueDateVal ? new Date(dueDateVal).getTime() : null;
+  // Validation: past follow-ups, follow-ups after due date, out-of-order entries
+  const pastWarnings = followups.map(f => f ? new Date(f).getTime() < nowMs : false);
   const afterDueWarnings = followups.map(f => !f || !dueMs ? false : new Date(f).getTime() > dueMs);
   const outOfOrderWarnings = followups.map((f, i) => {
     if (!f || i === 0) return false;
@@ -604,7 +619,8 @@ function NewTaskModal({ onClose, onCreated, toast, initialUsers }: {
     if (!prev) return false;
     return new Date(f).getTime() < new Date(prev).getTime();
   });
-  const hasWarning = afterDueWarnings.some(Boolean) || outOfOrderWarnings.some(Boolean);
+  const dueDateInPast = dueMs !== null && dueMs < nowMs;
+  const hasWarning = pastWarnings.some(Boolean) || afterDueWarnings.some(Boolean) || outOfOrderWarnings.some(Boolean) || dueDateInPast;
   const filledFollowups = followups.filter(f => f.trim());
 
   async function submit(e: React.FormEvent) {
@@ -638,45 +654,79 @@ function NewTaskModal({ onClose, onCreated, toast, initialUsers }: {
           </button>
         </div>
         <form onSubmit={submit} className="p-6 space-y-5">
-          {/* Assignees */}
+          {/* Assignees — chips live inside the search bar; dropdown opens on click */}
           <div>
             <label className="block text-sm font-medium text-slate-600 mb-2">Assign to <span className="text-slate-400">(select one or more)</span></label>
-            <div className="space-y-2">
-              <input type="text" placeholder="Search team members..." value={userSearch} onChange={e => setUserSearch(e.target.value)} className={INPUT_CLS} />
-              {selectedIds.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {selectedIds.map(id => {
-                    const u = users.find(u => u.id === id);
-                    if (!u) return null;
-                    const c = getEmployeeColor(u.name);
+            <div
+              className="relative"
+              onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setPickerOpen(false); }}
+            >
+              {/* Combined chip + search field */}
+              <div
+                onClick={() => { setPickerOpen(true); searchInputRef.current?.focus(); }}
+                className={`flex flex-wrap items-center gap-1.5 min-h-[46px] bg-slate-50 border rounded-xl px-3 py-2 cursor-text transition-all ${
+                  pickerOpen ? "border-blue-400 ring-2 ring-blue-500/20" : "border-slate-200 hover:border-slate-300"
+                }`}
+              >
+                {selectedIds.map(id => {
+                  const u = users.find(u => u.id === id);
+                  if (!u) return null;
+                  const c = getEmployeeColor(u.name);
+                  return (
+                    <span key={id} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold text-white shadow-sm" style={{ background: c }}>
+                      {u.name}
+                      <button
+                        type="button"
+                        onClick={e => { e.stopPropagation(); toggleUser(u); }}
+                        className="text-white/70 hover:text-white transition-colors"
+                        aria-label={`Remove ${u.name}`}
+                      >
+                        <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+                      </button>
+                    </span>
+                  );
+                })}
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  placeholder={selectedIds.length === 0 ? "Click to choose team members..." : "Add another..."}
+                  value={userSearch}
+                  onChange={e => { setUserSearch(e.target.value); setPickerOpen(true); }}
+                  onFocus={() => setPickerOpen(true)}
+                  className="flex-1 min-w-[120px] bg-transparent border-none outline-none text-sm text-slate-800 placeholder-slate-400 py-0.5"
+                />
+              </div>
+
+              {/* Dropdown — all users, toggle to add/remove */}
+              {pickerOpen && (
+                <div className="absolute left-0 right-0 top-full mt-1 z-10 max-h-44 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-xl divide-y divide-slate-100 hide-scrollbar anim-pop">
+                  {filteredUsers.length === 0 && <p className="text-sm text-slate-400 p-3 text-center">No members found</p>}
+                  {filteredUsers.map(u => {
+                    const sel = selectedIds.includes(u.id);
                     return (
-                      <span key={id} className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold text-white shadow-sm" style={{ background: c }}>
-                        {u.name}
-                        <button type="button" onClick={() => toggleUser(u)} className="text-white/70 hover:text-white transition-colors">
-                          <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
-                        </button>
-                      </span>
+                      <button
+                        key={u.id}
+                        type="button"
+                        onClick={() => toggleUser(u)}
+                        className={`w-full text-left px-4 py-2.5 text-sm flex items-center justify-between transition-colors ${sel ? "bg-blue-50 text-blue-700 font-medium" : "text-slate-600 hover:bg-slate-50"}`}
+                      >
+                        <span className="flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: getEmployeeColor(u.name) }} />
+                          {u.name}
+                        </span>
+                        {sel ? (
+                          <span className="flex items-center gap-1 text-xs text-blue-600 font-medium">
+                            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
+                            Added
+                          </span>
+                        ) : (
+                          <span className="text-xs text-slate-400">Click to add</span>
+                        )}
+                      </button>
                     );
                   })}
                 </div>
               )}
-              <div className="max-h-36 overflow-y-auto bg-slate-50 border border-slate-200 rounded-xl divide-y divide-slate-200 hide-scrollbar">
-                {filteredUsers.length === 0 && <p className="text-sm text-slate-400 p-3 text-center">No members found</p>}
-                {filteredUsers.map(u => {
-                  const sel = selectedIds.includes(u.id);
-                  return (
-                    <button key={u.id} type="button" onClick={() => toggleUser(u)}
-                      className={`w-full text-left px-4 py-2.5 text-sm flex items-center justify-between transition-colors ${sel ? "bg-blue-50 text-blue-700 font-medium" : "text-slate-600 hover:bg-slate-100"}`}
-                    >
-                      <span className="flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: getEmployeeColor(u.name) }} />
-                        {u.name}
-                      </span>
-                      {sel && <svg className="w-4 h-4 text-blue-600 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>}
-                    </button>
-                  );
-                })}
-              </div>
             </div>
           </div>
 
@@ -690,7 +740,10 @@ function NewTaskModal({ onClose, onCreated, toast, initialUsers }: {
 
           {/* Due date */}
           <div>
-            <label className="block text-sm font-medium text-slate-600 mb-2">Due date</label>
+            <label className="block text-sm font-medium text-slate-600 mb-2">
+              Due date
+              {dueDateInPast && <span className="text-rose-500 font-medium ml-2 text-xs">⚠ Due date is in the past</span>}
+            </label>
             <div className="flex gap-2 mb-2">
               {(["open", "custom"] as const).map(m => (
                 <button key={m} type="button" onClick={() => setDueDateMode(m)}
@@ -701,7 +754,13 @@ function NewTaskModal({ onClose, onCreated, toast, initialUsers }: {
               ))}
             </div>
             {dueDateMode === "custom" && (
-              <input type="datetime-local" value={dueDateVal} onChange={e => setDueDateVal(e.target.value)} className={INPUT_CLS} />
+              <input
+                type="datetime-local"
+                value={dueDateVal}
+                min={minLocal}
+                onChange={e => setDueDateVal(e.target.value)}
+                className={`${INPUT_CLS} ${dueDateInPast ? "border-rose-400" : ""}`}
+              />
             )}
           </div>
 
@@ -710,21 +769,24 @@ function NewTaskModal({ onClose, onCreated, toast, initialUsers }: {
             <label className="block text-sm font-medium text-slate-600 mb-2">Follow-up schedule</label>
             <div className="space-y-2">
               {followups.map((f, i) => {
+                const isPast = pastWarnings[i];
                 const isAfterDue = afterDueWarnings[i];
                 const isOutOfOrder = outOfOrderWarnings[i];
-                const hasFieldWarning = isAfterDue || isOutOfOrder;
+                const hasFieldWarning = isPast || isAfterDue || isOutOfOrder;
                 const ordinal = ["1st","2nd","3rd"][i] ?? `${i + 1}th`;
                 return (
                   <div key={i} className="flex gap-2 items-end">
                     <div className="flex-1">
-                      <p className="text-xs text-slate-400 mb-1 flex items-center gap-2">
+                      <p className="text-xs text-slate-400 mb-1 flex items-center gap-2 flex-wrap">
                         <span>{ordinal} Follow-up</span>
-                        {isAfterDue && <span className="text-rose-500 font-medium">⚠ After due date</span>}
-                        {isOutOfOrder && !isAfterDue && <span className="text-amber-600 font-medium">⚠ Earlier than previous — will auto-sort</span>}
+                        {isPast && <span className="text-rose-500 font-medium">⚠ This time is already in the past</span>}
+                        {isAfterDue && !isPast && <span className="text-rose-500 font-medium">⚠ After due date</span>}
+                        {isOutOfOrder && !isPast && !isAfterDue && <span className="text-amber-600 font-medium">⚠ Earlier than previous — will auto-sort</span>}
                       </p>
                       <input
                         type="datetime-local"
                         value={f}
+                        min={minLocal}
                         onChange={e => setFollowupAt(i, e.target.value)}
                         onBlur={sortFollowups}
                         className={`${INPUT_CLS} ${hasFieldWarning ? "border-rose-400" : ""}`}

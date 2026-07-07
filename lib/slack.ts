@@ -71,6 +71,9 @@ export async function postThreadReply(
 
 // Post a message with a colored left-border stripe using Slack attachments.
 // color: any hex like "#3B82F6" or Slack keywords "good", "warning", "danger"
+// IMPORTANT: top-level `text` is intentionally omitted — Slack renders it in
+// ADDITION to attachments, which doubles the message. The attachment's
+// `fallback` field covers push/desktop notifications instead.
 export async function postColoredMessage(
   channelId: string,
   threadTs: string,
@@ -90,11 +93,11 @@ export async function postColoredMessage(
   await slack.chat.postMessage({
     channel: channelId,
     thread_ts: threadTs,
-    text,
     reply_broadcast: options?.broadcast ?? false,
     attachments: [
       {
         color,
+        fallback: text,
         blocks,
       },
     ],
