@@ -94,8 +94,9 @@ function LoginForm() {
           <p className="text-blue-100/80 text-sm font-medium drop-shadow">Internal Access Only</p>
         </div>
 
-        {/* Solid white card — clearly separated from the gradient background */}
-        <div className="bg-white border border-slate-200 rounded-3xl shadow-2xl shadow-black/30 p-8">
+        {/* Gradient-bordered card */}
+        <div className="p-[2px] rounded-3xl shadow-2xl shadow-black/40" style={{ background: "linear-gradient(135deg, #38bdf8 0%, #818cf8 40%, #a78bfa 70%, #38bdf8 100%)" }}>
+        <div className="bg-white rounded-[22px] p-8">
           <h2 className="text-xl font-bold mb-6 text-center text-slate-900 tracking-tight">
             {titles[mode].heading}
           </h2>
@@ -152,7 +153,8 @@ function LoginForm() {
 
             <button
               type="submit" disabled={busy}
-              className="w-full inline-flex items-center justify-center gap-2.5 bg-blue-600 hover:bg-blue-700 hover:-translate-y-0.5 disabled:opacity-60 disabled:hover:translate-y-0 text-white font-semibold text-sm py-3.5 rounded-xl shadow-lg shadow-blue-500/30 transition-all active:scale-[0.98]"
+              className="w-full inline-flex items-center justify-center gap-2.5 hover:-translate-y-0.5 disabled:opacity-60 disabled:hover:translate-y-0 text-white font-semibold text-sm py-3.5 rounded-xl shadow-lg shadow-blue-500/40 transition-all active:scale-[0.98]"
+              style={{ background: "linear-gradient(135deg, #2563eb 0%, #7c3aed 60%, #06b6d4 100%)" }}
             >
               {busy && <Spinner />}
               {busy ? "Please wait..." : titles[mode].cta}
@@ -182,6 +184,7 @@ function LoginForm() {
               </button>
             )}
           </div>
+        </div>
         </div>
 
         <p className="text-center text-xs text-white font-medium mt-6 drop-shadow" style={{ textShadow: "0 1px 8px rgba(0,0,0,0.4)" }}>

@@ -852,6 +852,7 @@ export default function DashboardClient({ initialTasks, userEmail }: {
   const router = useRouter();
   const [tasks, setTasks] = useState<TaskWithComments[]>(sortByStatus(initialTasks));
   const [filter, setFilter] = useState("all");
+  const [isEmployeeView, setIsEmployeeView] = useState(false);
   const [sortBy, setSortBy] = useState<SortBy>("status");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [newTaskOpen, setNewTaskOpen] = useState(false);
@@ -951,9 +952,8 @@ export default function DashboardClient({ initialTasks, userEmail }: {
     cancelled: tasks.filter(t => t.status === "cancelled").length,
   } as Record<string, number>;
 
-  const filteredTasks = filter === "all" || filter === "by_employee" ? tasks : tasks.filter(t => t.status === filter);
+  const filteredTasks = filter === "all" ? tasks : tasks.filter(t => t.status === filter);
   const visible = applySort(filteredTasks, sortBy);
-  const isEmployeeView = filter === "by_employee";
 
   return (
     <main className="min-h-screen relative text-white overflow-x-hidden">
@@ -991,7 +991,7 @@ export default function DashboardClient({ initialTasks, userEmail }: {
               <span className="hidden sm:inline">{refreshing ? "Refreshing..." : "Refresh"}</span>
             </button>
             <button
-              onClick={() => setFilter(isEmployeeView ? "all" : "by_employee")}
+              onClick={() => setIsEmployeeView(v => !v)}
               className={`inline-flex items-center gap-2 font-medium text-sm px-4 py-2.5 rounded-xl transition-all active:scale-[0.98] shadow-lg ${
                 isEmployeeView
                   ? "bg-indigo-600 border border-indigo-500 text-white shadow-indigo-500/30"
@@ -1004,7 +1004,7 @@ export default function DashboardClient({ initialTasks, userEmail }: {
             <button onClick={() => setNewTaskOpen(true)} className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 border border-blue-500 hover:-translate-y-0.5 text-white font-semibold text-sm px-5 py-2.5 rounded-xl shadow-lg shadow-blue-900/40 transition-all active:scale-[0.98]">
               <IconPlus /> New Task
             </button>
-            <button onClick={signOut} disabled={signingOut} className={`inline-flex items-center gap-2 ${HEADER_BTN} hover:text-rose-600 font-medium text-sm px-3.5 py-2.5 rounded-xl transition-all disabled:opacity-60 active:scale-[0.98]`}>
+            <button onClick={signOut} disabled={signingOut} className="inline-flex items-center gap-2 bg-white/95 border border-rose-300 hover:bg-rose-50 hover:border-rose-400 text-rose-500 hover:text-rose-600 font-medium text-sm px-3.5 py-2.5 rounded-xl shadow-lg transition-all disabled:opacity-60 active:scale-[0.98]">
               {signingOut ? <IconSpinner /> : <IconLogout />}
               <span className="hidden sm:inline">{signingOut ? "Signing out..." : "Sign out"}</span>
             </button>
@@ -1027,36 +1027,34 @@ export default function DashboardClient({ initialTasks, userEmail }: {
           ))}
         </div>
 
-        {/* Filter tabs — color-coded per status */}
-        {!isEmployeeView && (
-          <div className="flex gap-1.5 mb-4 flex-wrap">
-            {FILTERS.map(f => {
-              const fc = FILTER_COLORS[f.key] ?? FILTER_COLORS.all;
-              const isActive = filter === f.key;
-              return (
-                <button
-                  key={f.key}
-                  onClick={() => { setFilter(f.key); if (f.key === "all") setSortBy("status"); }}
-                  className={`shrink-0 px-3.5 py-1.5 rounded-xl text-sm font-medium transition-all flex items-center gap-1.5 shadow-md border ${
-                    isActive
-                      ? "bg-blue-600 border-blue-500 text-white shadow-blue-900/30"
-                      : fc.tab
-                  }`}
-                >
-                  {f.label}
-                  {counts[f.key] > 0 && (
-                    <span className={`text-xs px-1.5 py-0.5 rounded-full ${isActive ? "bg-white/25 text-white" : fc.badge}`}>
-                      {counts[f.key]}
-                    </span>
-                  )}
-                  {f.key === "pending_review" && counts.pending_review > 0 && (
-                    <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        )}
+        {/* Filter tabs — color-coded per status, always visible */}
+        <div className="flex gap-1.5 mb-4 flex-wrap">
+          {FILTERS.map(f => {
+            const fc = FILTER_COLORS[f.key] ?? FILTER_COLORS.all;
+            const isActive = filter === f.key;
+            return (
+              <button
+                key={f.key}
+                onClick={() => { setFilter(f.key); if (f.key === "all") setSortBy("status"); }}
+                className={`shrink-0 px-3.5 py-1.5 rounded-xl text-sm font-medium transition-all flex items-center gap-1.5 shadow-md border ${
+                  isActive
+                    ? "bg-blue-600 border-blue-500 text-white shadow-blue-900/30"
+                    : fc.tab
+                }`}
+              >
+                {f.label}
+                {counts[f.key] > 0 && (
+                  <span className={`text-xs px-1.5 py-0.5 rounded-full ${isActive ? "bg-white/25 text-white" : fc.badge}`}>
+                    {counts[f.key]}
+                  </span>
+                )}
+                {f.key === "pending_review" && counts.pending_review > 0 && (
+                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                )}
+              </button>
+            );
+          })}
+        </div>
 
         {/* Sort controls — solid white pills */}
         <div className="flex items-center gap-2 mb-5">
@@ -1076,7 +1074,7 @@ export default function DashboardClient({ initialTasks, userEmail }: {
 
         {/* Task list or employee view */}
         {isEmployeeView ? (
-          <EmployeeView tasks={tasks} sortBy={sortBy} expandedId={expandedId} onToggle={id => setExpandedId(expandedId === id ? null : id)} onAction={handleAction} userMap={userMap} />
+          <EmployeeView tasks={filteredTasks} sortBy={sortBy} expandedId={expandedId} onToggle={id => setExpandedId(expandedId === id ? null : id)} onAction={handleAction} userMap={userMap} />
         ) : (
           <div className="space-y-3">
             {visible.length === 0 && (
