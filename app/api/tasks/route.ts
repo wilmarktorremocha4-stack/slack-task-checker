@@ -50,6 +50,7 @@ export async function POST(request: Request) {
     assigneeNames,
     taskText,
     followupSchedule,
+    noFollowup,
     dueDate,
     // legacy single-assignee fields (Slack events path)
     assigneeId,
@@ -59,6 +60,7 @@ export async function POST(request: Request) {
     assigneeNames?: string[];
     taskText: string;
     followupSchedule?: string[] | null;
+    noFollowup?: boolean;
     dueDate?: string | null;
     assigneeId?: string;
     assigneeName?: string;
@@ -77,12 +79,14 @@ export async function POST(request: Request) {
 
   const brandonName = await getSlackUserName(brandonUserId);
 
-  // Determine next follow-up time
+  // Determine next follow-up time (null when noFollowup is set)
   let nextFollowupAt: Date | null = null;
-  if (followupSchedule && followupSchedule.length > 0) {
-    nextFollowupAt = new Date(followupSchedule[0]);
-  } else {
-    nextFollowupAt = calculateNextFollowupAt(0);
+  if (!noFollowup) {
+    if (followupSchedule && followupSchedule.length > 0) {
+      nextFollowupAt = new Date(followupSchedule[0]);
+    } else {
+      nextFollowupAt = calculateNextFollowupAt(0);
+    }
   }
 
   const mentions = ids.map(id => `<@${id}>`).join(" ");
@@ -115,8 +119,8 @@ export async function POST(request: Request) {
     );
   }
 
-  // Recalculate next followup from sorted schedule
-  if (sortedFollowupSchedule?.length) {
+  // Recalculate next followup from sorted schedule (skip when noFollowup)
+  if (!noFollowup && sortedFollowupSchedule?.length) {
     nextFollowupAt = new Date(sortedFollowupSchedule[0]);
   }
 
@@ -179,7 +183,7 @@ export async function POST(request: Request) {
       thread_ts: messageTs,
       status: "active",
       followup_count: 0,
-      max_followups: sortedFollowupSchedule ? sortedFollowupSchedule.length : 5,
+      max_followups: noFollowup ? 0 : (sortedFollowupSchedule ? sortedFollowupSchedule.length : 5),
       followup_schedule: sortedFollowupSchedule ?? null,
       due_date: dueDate ?? null,
       next_followup_at: nextFollowupAt?.toISOString() ?? null,

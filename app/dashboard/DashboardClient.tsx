@@ -605,6 +605,7 @@ function NewTaskModal({ onClose, onCreated, toast, initialUsers }: {
   const [pickerOpen, setPickerOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [followups, setFollowups] = useState<string[]>([""]);
+  const [followupMode, setFollowupMode] = useState<"scheduled" | "none">("scheduled");
   const [dueDateMode, setDueDateMode] = useState<"open" | "custom">("open");
   const [dueDateVal, setDueDateVal] = useState("");
   const minLocal = nowLocalInput();
@@ -649,10 +650,10 @@ function NewTaskModal({ onClose, onCreated, toast, initialUsers }: {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!selectedIds.length || !taskText.trim() || hasWarning || filledFollowups.length === 0) return;
+    const needsSchedule = followupMode === "scheduled" && filledFollowups.length === 0;
+    if (!selectedIds.length || !taskText.trim() || hasWarning || needsSchedule) return;
     const selectedUsers = selectedIds.map(id => users.find(u => u.id === id)!).filter(Boolean);
-    // Always sort chronologically before submitting
-    const followupSchedule = filledFollowups
+    const followupSchedule = followupMode === "none" ? null : filledFollowups
       .sort((a, b) => new Date(a).getTime() - new Date(b).getTime())
       .map(f => new Date(f).toISOString());
     const dueDate = dueDateMode === "custom" && dueDateVal ? new Date(dueDateVal).toISOString() : null;
@@ -660,7 +661,7 @@ function NewTaskModal({ onClose, onCreated, toast, initialUsers }: {
     try {
       const res = await fetch("/api/tasks", {
         method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ assigneeIds: selectedUsers.map(u => u.id), assigneeNames: selectedUsers.map(u => u.name), taskText, followupSchedule, dueDate }),
+        body: JSON.stringify({ assigneeIds: selectedUsers.map(u => u.id), assigneeNames: selectedUsers.map(u => u.name), taskText, followupSchedule, noFollowup: followupMode === "none", dueDate }),
       });
       if (res.ok) { toast("Task created and posted to Slack", true); onCreated(); onClose(); }
       else { const d = await res.json(); toast(d.error ?? "Failed to create task", false); }
@@ -791,52 +792,69 @@ function NewTaskModal({ onClose, onCreated, toast, initialUsers }: {
           {/* Follow-up schedule */}
           <div>
             <label className="block text-sm font-medium text-slate-600 mb-2">Follow-up schedule</label>
-            <div className="space-y-2">
-              {followups.map((f, i) => {
-                const isPast = pastWarnings[i];
-                const isAfterDue = afterDueWarnings[i];
-                const isOutOfOrder = outOfOrderWarnings[i];
-                const hasFieldWarning = isPast || isAfterDue || isOutOfOrder;
-                const ordinal = ["1st","2nd","3rd"][i] ?? `${i + 1}th`;
-                return (
-                  <div key={i} className="flex gap-2 items-end">
-                    <div className="flex-1">
-                      <p className="text-xs text-slate-400 mb-1 flex items-center gap-2 flex-wrap">
-                        <span>{ordinal} Follow-up</span>
-                        {isPast && <span className="text-rose-500 font-medium">⚠ This time is already in the past</span>}
-                        {isAfterDue && !isPast && <span className="text-rose-500 font-medium">⚠ After due date</span>}
-                        {isOutOfOrder && !isPast && !isAfterDue && <span className="text-amber-600 font-medium">⚠ Earlier than previous — will auto-sort</span>}
-                      </p>
-                      <input
-                        type="datetime-local"
-                        value={f}
-                        min={minLocal}
-                        onChange={e => setFollowupAt(i, e.target.value)}
-                        onBlur={sortFollowups}
-                        className={`${INPUT_CLS} ${hasFieldWarning ? "border-rose-400" : ""}`}
-                      />
-                    </div>
-                    {followups.length > 1 && (
-                      <button type="button" onClick={() => removeFollowup(i)}
-                        className="w-9 h-9 rounded-lg bg-rose-50 border border-rose-200 text-rose-500 hover:bg-rose-100 flex items-center justify-center transition-all shrink-0">
-                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
-              <button type="button" onClick={addFollowup}
-                className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 bg-blue-50 border border-blue-200 hover:border-blue-300 px-3 py-1.5 rounded-lg transition-all">
-                <IconPlus /> Add follow-up
-              </button>
+            <div className="flex gap-2 mb-3">
+              {(["scheduled", "none"] as const).map(m => (
+                <button key={m} type="button" onClick={() => setFollowupMode(m)}
+                  className={`px-4 py-1.5 rounded-lg text-sm font-medium border transition-all ${followupMode === m ? "bg-blue-600 border-blue-600 text-white shadow-md shadow-blue-500/20" : "bg-white border-slate-200 text-slate-500 hover:border-slate-300 hover:text-slate-700"}`}
+                >
+                  {m === "scheduled" ? "Schedule" : "No follow-up"}
+                </button>
+              ))}
             </div>
+
+            {followupMode === "none" ? (
+              <div className="flex items-center gap-2.5 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-500">
+                <svg className="w-4 h-4 shrink-0 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+                No automatic follow-ups will be sent for this task.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {followups.map((f, i) => {
+                  const isPast = pastWarnings[i];
+                  const isAfterDue = afterDueWarnings[i];
+                  const isOutOfOrder = outOfOrderWarnings[i];
+                  const hasFieldWarning = isPast || isAfterDue || isOutOfOrder;
+                  const ordinal = ["1st","2nd","3rd"][i] ?? `${i + 1}th`;
+                  return (
+                    <div key={i} className="flex gap-2 items-end">
+                      <div className="flex-1">
+                        <p className="text-xs text-slate-400 mb-1 flex items-center gap-2 flex-wrap">
+                          <span>{ordinal} Follow-up</span>
+                          {isPast && <span className="text-rose-500 font-medium">⚠ This time is already in the past</span>}
+                          {isAfterDue && !isPast && <span className="text-rose-500 font-medium">⚠ After due date</span>}
+                          {isOutOfOrder && !isPast && !isAfterDue && <span className="text-amber-600 font-medium">⚠ Earlier than previous — will auto-sort</span>}
+                        </p>
+                        <input
+                          type="datetime-local"
+                          value={f}
+                          min={minLocal}
+                          onChange={e => setFollowupAt(i, e.target.value)}
+                          onBlur={sortFollowups}
+                          className={`${INPUT_CLS} ${hasFieldWarning ? "border-rose-400" : ""}`}
+                        />
+                      </div>
+                      {followups.length > 1 && (
+                        <button type="button" onClick={() => removeFollowup(i)}
+                          className="w-9 h-9 rounded-lg bg-rose-50 border border-rose-200 text-rose-500 hover:bg-rose-100 flex items-center justify-center transition-all shrink-0">
+                          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+                <button type="button" onClick={addFollowup}
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 bg-blue-50 border border-blue-200 hover:border-blue-300 px-3 py-1.5 rounded-lg transition-all">
+                  <IconPlus /> Add follow-up
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="flex gap-3 pt-1">
             <button type="button" onClick={onClose} className="flex-1 bg-slate-100 border border-slate-200 hover:bg-slate-200 text-slate-700 font-medium text-sm py-3 rounded-xl transition-all active:scale-[0.98]">
               Cancel
             </button>
-            <button type="submit" disabled={!selectedIds.length || !taskText.trim() || filledFollowups.length === 0 || hasWarning || submitting}
+            <button type="submit" disabled={!selectedIds.length || !taskText.trim() || (followupMode === "scheduled" && filledFollowups.length === 0) || hasWarning || submitting}
               className="flex-1 bg-blue-600 hover:bg-blue-700 hover:-translate-y-0.5 disabled:opacity-50 text-white font-semibold text-sm py-3 rounded-xl shadow-lg shadow-blue-500/25 transition-all active:scale-[0.98]">
               {submitting ? "Posting to Slack..." : "Assign Task"}
             </button>
