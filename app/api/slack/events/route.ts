@@ -73,13 +73,43 @@ async function processSlackEvent(event: Record<string, unknown>) {
   const monitoredChannelId = process.env.SLACK_CHANNEL_ID!;
   const brandonUserId = process.env.SLACK_BRANDON_USER_ID!;
 
-  // ── CASE 0: File/audio message uploaded ─────────────────────────────────────
+  // ── TOP-LEVEL GUARDS (apply before anything else) ───────────────────────────
+
+  // Only process events from the monitored channel
+  if (event.channel !== monitoredChannelId) return;
+
+  // Ignore bot messages and automated system messages.
+  // Check both bot_id (API bots) and app_id (Slack apps), and also check
+  // if the sender user ID matches our own bot — some Slack configurations
+  // omit bot_id on the bot's own messages.
+  if (event.bot_id || event.app_id) {
+    console.log("[slack] ignoring bot/app message");
+    return;
+  }
+  const botUserId = await getBotUserId();
+  const botEnvId = process.env.SLACK_BOT_USER_ID ?? "";
+  const senderId = (event.user as string) ?? "";
+  if (senderId && (senderId === botUserId || senderId === botEnvId)) {
+    console.log("[slack] ignoring message from bot's own user ID");
+    return;
+  }
+
+  // Ignore message subtypes: edits (message_changed), deletions (message_deleted),
+  // thread_broadcast, file_share replies, slackbot_response, etc.
+  // Only process clean, original human messages.
+  if (event.subtype) {
+    console.log("[slack] ignoring subtype:", event.subtype);
+    return;
+  }
+
+  console.log("[slack] event:", event.type, "thread_ts:", event.thread_ts ?? "none", "user:", senderId);
+
+  // ── CASE 0: Audio file uploaded to channel root ──────────────────────────────
   if (
     event.type === "message" &&
     event.files &&
     Array.isArray(event.files) &&
     event.files.length > 0 &&
-    event.channel === monitoredChannelId &&
     !event.thread_ts
   ) {
     const files = event.files as Array<Record<string, unknown>>;
@@ -101,30 +131,34 @@ async function processSlackEvent(event: Record<string, unknown>) {
       await handleVoiceMessage(event, audioFile, supabase, brandonUserId);
       return;
     }
+    // Non-audio file upload — ignore
+    return;
   }
 
-  const isMention = event.type === "app_mention";
-  const channelMatch = event.channel === monitoredChannelId;
-  const noThread = !event.thread_ts;
-
-  if (isMention && channelMatch && noThread) {
+  // ── CASE 1: Bot @mentioned in channel root → create new task ─────────────────
+  if (event.type === "app_mention" && !event.thread_ts) {
     console.log("[slack] → new task mention");
     await handleNewTaskMention(event, supabase, brandonUserId);
     return;
   }
 
-  // Bot @mentioned inside an existing thread — treat as a thread command
-  if (isMention && channelMatch && event.thread_ts) {
+  // ── CASE 2: Bot @mentioned inside a thread → thread command ──────────────────
+  if (event.type === "app_mention" && event.thread_ts) {
     console.log("[slack] → bot mentioned in thread");
     await handleBotMentionInThread(event, supabase, brandonUserId);
     return;
   }
 
-  if (event.type === "message" && event.thread_ts && event.thread_ts !== event.ts && !event.bot_id) {
+  // ── CASE 3: Human reply in a task thread (bot NOT mentioned) ─────────────────
+  // Only fires for genuine thread replies — NOT top-level channel messages.
+  // thread_ts exists and differs from ts only on actual replies.
+  if (event.type === "message" && event.thread_ts && event.thread_ts !== event.ts) {
     console.log("[slack] → thread reply");
     await handleThreadReply(event, supabase);
     return;
   }
+
+  // Everything else (top-level channel messages, reactions, etc.) — ignore silently
 }
 
 async function handleNewTaskMention(
@@ -281,7 +315,14 @@ async function handleThreadReply(
       .map(m => m[1])
       .filter(id => id !== process.env.SLACK_BRANDON_USER_ID);
 
-    if (replyMentions.length > 0) {
+    // Only resolve the pending task if the message is primarily an assignment
+    // (short text, essentially just @mentions). If Brandon is writing a full
+    // sentence or having a conversation in this thread, don't treat it as
+    // task assignment — he might just be chatting.
+    const nonMentionText = rawReplyText.replace(/<@[A-Z0-9]+>/g, "").trim();
+    const isAssignmentMessage = replyMentions.length > 0 && nonMentionText.length <= 30;
+
+    if (isAssignmentMessage) {
       const teamMembers = await getWorkspaceMembers();
       const assignerName = await getSlackUserName(userId);
       const nextFollowupAt = calculateNextFollowupAt(
