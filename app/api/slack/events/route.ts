@@ -224,10 +224,22 @@ async function handleNewTaskMention(
 
   const allMentions = assignees.map(a => `<@${a.id}>`).join(", ");
 
+  // Bullet task lines if multiple
+  const taskLines = parsed.taskText
+    .split(/\n|;/)
+    .map((l: string) => l.trim())
+    .filter(Boolean);
+  const taskBody =
+    taskLines.length > 1
+      ? taskLines.map((l: string) => `• ${l}`).join("\n")
+      : `• ${parsed.taskText}`;
+
   await postThreadReply(
     channelId,
     threadTs,
-    `✅ Got it! I've logged this task for *${allAssigneeNames}*:\n> ${parsed.taskText}\n\nI'll follow up automatically until it's confirmed complete. ${allMentions}, just reply *"done"* in this thread when you've finished.`
+    `✅ *Task assigned*\n\n*Assigned to:* ${allMentions}\n\n` +
+      taskBody +
+      `\n\n${allMentions} — please reply *"done"* in this thread when the task is complete. Use this thread for any questions.`
   );
 
   console.log("[task] done — task created successfully");
@@ -300,17 +312,15 @@ async function handleThreadReply(
         .eq("id", pendingVoice.id);
 
       const assigneeMentions = matchedMembers.map(m => `<@${m.id}>`).join(", ");
-      const assigneeNames = matchedMembers.map(m => m.name).join(", ");
 
       await postThreadReply(
         pendingVoice.channel_id,
         pendingVoice.thread_ts,
-        `✅ Got it! Task assigned to ${assigneeMentions}.\n\n` +
-          `*Task:* ${pendingVoice.task_text}\n\n` +
-          `I'll follow up with ${assigneeNames} every 24 hours. Reply *"done"* when complete.`
+        `✅ *Task assigned*\n\n*Assigned to:* ${assigneeMentions}\n\n• ${pendingVoice.task_text}\n\n` +
+          `${assigneeMentions} — please reply *"done"* in this thread when the task is complete. Use this thread for any questions.`
       );
 
-      console.log("[voice] pending task resolved, assigned to:", assigneeNames);
+      console.log("[voice] pending task resolved, assigned to:", matchedMembers.map(m => m.name).join(", "));
       return;
     }
   }
@@ -495,8 +505,8 @@ async function handleVoiceMessage(
     if (member) matchedMembers.push(member);
   }
 
-  // Second: match names mentioned in the voice recording
-  if (matchedMembers.length === 0 && parsed.mentionedNames.length > 0) {
+  // Second: always supplement with names mentioned in the voice recording
+  if (parsed.mentionedNames.length > 0) {
     for (const mentionedName of parsed.mentionedNames) {
       const matched = teamMembers.find(
         m =>
@@ -576,18 +586,25 @@ async function handleVoiceMessage(
   }
 
   const assigneeMentions = matchedMembers.map(m => `<@${m.id}>`).join(", ");
-  const assigneeNames = matchedMembers.map(m => m.name).join(", ");
+
+  // Bullet the task lines if there are multiple (split on newlines or semicolons)
+  const taskLines = parsed.taskText
+    .split(/\n|;/)
+    .map(l => l.trim())
+    .filter(Boolean);
+  const taskBody =
+    taskLines.length > 1
+      ? taskLines.map(l => `• ${l}`).join("\n")
+      : `• ${parsed.taskText}`;
 
   await postThreadReply(
     channelId,
     threadTs,
-    `✅ *Task created from voice note!*\n\n` +
-      `*Assigned to:* ${assigneeMentions}\n` +
-      `*Task:* ${parsed.taskText}\n\n` +
-      `_"${transcription.slice(0, 200)}${transcription.length > 200 ? "..." : ""}"_\n\n` +
-      `I'll follow up with ${assigneeNames} every 24 hours (weekends excluded). ` +
-      `Reply *"done"* in this thread when complete.`
+    `✅ *Task assigned from voice note*\n\n` +
+      `*Assigned to:* ${assigneeMentions}\n\n` +
+      taskBody +
+      `\n\n${assigneeMentions} — please reply *"done"* in this thread when the task is complete. Use this thread for any questions.`
   );
 
-  console.log("[voice] tasks created for:", assigneeNames, "task:", parsed.taskText.slice(0, 80));
+  console.log("[voice] tasks created for:", matchedMembers.map(m => m.name).join(", "), "task:", parsed.taskText.slice(0, 80));
 }
