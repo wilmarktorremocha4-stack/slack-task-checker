@@ -15,6 +15,7 @@ import {
   transcribeAudio,
   parseVoiceTranscription,
   parseThreadCommand,
+  classifyCompletionIntent,
 } from "@/lib/openai-messages";
 import { calculateNextFollowupAt } from "@/lib/followup-schedule";
 
@@ -367,15 +368,20 @@ async function handleThreadReply(
     return;
   }
 
-  // Broad set of completion phrases
-  const isDoneMessage =
-    /\b(done|completed|finished|complete|all done|sorted|did it|it'?s done|it is done|submitted|sent|delivered|wrapped up|wrapped it up|good to go|ready|all set|taken care of|handled|checked|accomplished)\b/.test(
+  // Only assignees can mark a task done; non-assignees (Brandon, others) are always just conversation
+  const mightBeDone =
+    isAssignee &&
+    /\b(done|completed|finished|complete|all done|sorted|submitted|sent|delivered|wrapped up|good to go|ready|all set|handled|accomplished)\b/.test(
       messageText
     );
 
-  console.log("[reply] isAssignee:", isAssignee, "isDoneMessage:", isDoneMessage, "text:", messageText);
+  console.log("[reply] isAssignee:", isAssignee, "mightBeDone:", mightBeDone, "text:", messageText);
 
-  if (isAssignee && isDoneMessage) {
+  const isDoneMessage = mightBeDone
+    ? await classifyCompletionIntent(rawText, task.task_text)
+    : false;
+
+  if (isDoneMessage) {
     await supabase
       .from("tasks")
       .update({

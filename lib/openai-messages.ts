@@ -200,6 +200,82 @@ If no task is found, set hasTask to false and all other fields to empty/false.`,
   }
 }
 
+export async function classifyCompletionIntent(
+  messageText: string,
+  taskText: string
+): Promise<boolean> {
+  const lower = messageText.toLowerCase().trim();
+
+  // Hard negatives — skip GPT entirely
+  if (
+    /\b(not yet|still working|still on it|in progress|still need to|working on it|haven'?t|didn'?t finish|not done|not finished|not complete)\b/.test(lower)
+  )
+    return false;
+  if (/\bdone deal\b/.test(lower)) return false;
+  if (/\b(done for the day|done with (you|this (person|client|call|meeting|conversation)))\b/.test(lower))
+    return false;
+
+  // Hard positives — short standalone completions, skip GPT
+  if (
+    /^(done[!.]?|completed[!.]?|finished[!.]?|all done[!.]?|just finished|just submitted|just sent|sent it|submitted it|done and done|✅|yep done|yes done)$/i.test(
+      lower
+    )
+  )
+    return true;
+
+  // Anything without a completion word at all — skip GPT
+  if (
+    !/\b(done|completed|finished|complete|submitted|sent|delivered|wrapped up|handled|accomplished|sorted|ready)\b/.test(
+      lower
+    )
+  )
+    return false;
+
+  // Ambiguous — ask GPT
+  try {
+    const openai = getOpenAIClient();
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: `You determine if a Slack message is genuinely confirming that a specific task is complete.
+
+Task being tracked: "${taskText}"
+
+Reply with only "yes" or "no".
+"yes" = the person is clearly saying this task is finished and done.
+"no" = they are chatting, giving an update, speaking about something else, or completion is future/uncertain.
+
+Examples:
+"not done yet, still working" → no
+"done deal!" → no
+"done with this client honestly" → no
+"yeah I finished it this morning" → yes
+"sent it over to them" → yes
+"I'll get it done by tomorrow" → no
+"working on it, almost there" → no
+"done" → yes
+"it's been handled" → yes`,
+        },
+        {
+          role: "user",
+          content: messageText,
+        },
+      ],
+      max_tokens: 5,
+      temperature: 0,
+    });
+
+    const answer = response.choices[0]?.message?.content?.toLowerCase().trim() ?? "no";
+    console.log("[gpt] completion intent for:", messageText.slice(0, 60), "→", answer);
+    return answer.startsWith("yes");
+  } catch {
+    // On GPT failure, only trigger on very clear standalone completions
+    return /^(done|completed|finished|all done)[!.]?$/i.test(lower);
+  }
+}
+
 export async function parseThreadCommand(options: {
   messageText: string;
   existingTaskText: string;
