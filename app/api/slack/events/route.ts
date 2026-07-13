@@ -141,11 +141,13 @@ async function handleNewTaskMention(
   console.log("[task] step 1 — raw message:", messageText);
 
   const botUserId = await getBotUserId();
+  // Also filter via env var as a cold-start fallback (auth.test() may fail)
+  const botEnvId = process.env.SLACK_BOT_USER_ID ?? "";
 
   const mentionPattern = /<@([A-Z0-9]+)>/g;
   const mentions = [...messageText.matchAll(mentionPattern)]
     .map(m => m[1])
-    .filter(id => id !== brandonUserId && id !== botUserId);
+    .filter(id => id !== brandonUserId && id !== botUserId && id !== botEnvId);
 
   const cleanMessage = messageText.replace(/<@[A-Z0-9]+>/g, "").trim();
 
@@ -470,10 +472,12 @@ async function handleBotMentionInThread(
     ...new Set(threadTasks.flatMap((t) => (t.assignee_names?.length ? t.assignee_names : [t.assigned_to_name]) as string[])),
   ];
 
+  const botEnvId = process.env.SLACK_BOT_USER_ID ?? "";
+
   // Extract @mentions from the command (excluding bot and brandon)
   const mentionedIds = [...rawText.matchAll(/<@([A-Z0-9]+)>/g)]
     .map((m) => m[1])
-    .filter((id) => id !== botUserId && id !== brandonUserId);
+    .filter((id) => id !== botUserId && id !== botEnvId && id !== brandonUserId);
 
   // Build a human-readable version of the message for GPT
   const humanText = rawText.replace(/<@([A-Z0-9]+)>/g, (_, id) => {
@@ -708,6 +712,19 @@ async function handleBotMentionInThread(
       `✅ *New task added*\n\n*Assigned to:* ${taskMentions}\n\n${taskBody}\n\n${taskMentions} — please reply *"done"* in this thread when complete. Use this thread for any questions.`
     );
     console.log("[thread-cmd] add_task for:", assignees.map((m) => m.name).join(", "), "task:", newText.slice(0, 80));
+    return;
+  }
+
+  // ── CANCEL TASK ───────────────────────────────────────────────────────────
+  if (command.intent === "cancel_task") {
+    const existingIds = threadTasks.map((t) => t.id as string);
+    await supabase.from("tasks").update({ status: "cancelled", next_followup_at: null }).in("id", existingIds);
+    await postThreadReply(
+      channelId,
+      threadTs,
+      `🗑️ Got it — I've cancelled and removed that task. No further follow-ups will be sent.\n\nIf you need to assign a new task, just @mention me here with the corrected details.`
+    );
+    console.log("[thread-cmd] cancel_task — cancelled", existingIds.length, "task(s)");
     return;
   }
 }

@@ -27,8 +27,14 @@ Return JSON only with these fields:
   "hasTask": boolean,
   "taskText": "clean description of what needs to be done"
 }
-If the message is not assigning a task, set hasTask to false and taskText to "".
-Keep taskText concise but complete — include deadlines if mentioned.`,
+Rules:
+- Do NOT include assignee names in taskText — just describe the action itself.
+- Do NOT change verbs or rephrase the action. Use the exact wording from the message.
+- Keep taskText concise but complete — include deadlines if mentioned.
+- If the message is not assigning a task, set hasTask to false and taskText to "".
+
+Example: "Please ask the clients about their color palette" → taskText: "Ask the clients about their color palette"
+Example: "reach out to new leads and send intro email" → taskText: "Reach out to all new leads and send them the intro email"`,
         },
         {
           role: "user",
@@ -282,7 +288,7 @@ export async function parseThreadCommand(options: {
   existingAssigneeNames: string[];
   teamMemberNames: string[];
 }): Promise<{
-  intent: "add_assignee" | "remove_assignee" | "reassign" | "add_task" | "unknown";
+  intent: "add_assignee" | "remove_assignee" | "reassign" | "add_task" | "cancel_task" | "unknown";
   addNames: string[];
   removeNames: string[];
   newTaskText: string | null;
@@ -303,7 +309,7 @@ Known team members: ${options.teamMemberNames.join(", ")}
 
 Classify the user's intent and return JSON:
 {
-  "intent": "add_assignee" | "remove_assignee" | "reassign" | "add_task" | "unknown",
+  "intent": "add_assignee" | "remove_assignee" | "reassign" | "add_task" | "cancel_task" | "unknown",
   "addNames": ["name"],
   "removeNames": ["name"],
   "newTaskText": "description" | null,
@@ -312,9 +318,10 @@ Classify the user's intent and return JSON:
 
 Intent rules:
 - add_assignee: adding someone new to the EXISTING task (e.g. "also assign to X", "add X")
-- remove_assignee: removing someone from the existing task (e.g. "remove X", "unassign X")
+- remove_assignee: removing a specific PERSON from the task (e.g. "remove X", "unassign X")
 - reassign: replacing all assignees with new people (e.g. "only assign to X", "give this only to X", "remove X and assign to Y")
 - add_task: creating a brand-new separate task in this same thread (e.g. "add another task", "also ask them to")
+- cancel_task: cancelling/deleting/removing the whole task itself because it's wrong or no longer needed (e.g. "remove that task", "delete this task", "that task is wrong remove it", "cancel that", "the task description is incorrect please remove it")
 - unknown: can't determine intent
 
 For add_task: set newTaskText to the new task description. If the instruction implies existing people should also do it, set keepExistingAssignees to true; if specific new people are named, put them in addNames.
