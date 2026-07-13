@@ -526,6 +526,22 @@ async function handleBotMentionInThread(
     return m ? `@${m.name}` : `<@${id}>`;
   });
 
+  // Strip all @mentions to see what the person actually said
+  const textContent = rawText.replace(/<@[A-Z0-9]+>/g, "").replace(/\s+/g, " ").trim();
+
+  // Casual acknowledgments — person is just saying "got it", "thanks", etc.
+  // Stay completely silent. No need to respond.
+  const isAcknowledgment =
+    textContent.length === 0 ||
+    /^(got it|got it!|thanks|thank you|ok|okay|noted|understood|will do|on it|sure|sounds good|perfect|great|👍|🙏|alright|roger|copy that|no problem|np|cool|nice|awesome|perfect|received|ack|k|kk|yep|yup|yes|got|noted thanks)[.!,]?$/i.test(
+      textContent
+    );
+
+  if (isAcknowledgment) {
+    console.log("[thread-cmd] casual acknowledgment from", senderId, "— staying silent");
+    return;
+  }
+
   console.log("[thread-cmd] parsing command:", humanText.slice(0, 150));
 
   const command = await parseThreadCommand({
@@ -536,15 +552,21 @@ async function handleBotMentionInThread(
   });
 
   if (!command || command.intent === "unknown") {
-    await postThreadReply(
-      channelId,
-      threadTs,
-      `Not sure what you'd like me to do. Here's what I can handle in a task thread:\n` +
-        `• *Add someone:* "add @Person to this task"\n` +
-        `• *Remove someone:* "remove @Person from this task"\n` +
-        `• *Reassign:* "reassign this only to @Person"\n` +
-        `• *New task:* "add another task: [description]"`
-    );
+    // Only show the help menu if the message looked like an attempted command
+    // (has some meaningful content beyond just a greeting or name)
+    const looksLikeAttemptedCommand = textContent.length > 10;
+    if (looksLikeAttemptedCommand) {
+      await postThreadReply(
+        channelId,
+        threadTs,
+        `Hey, I'm not sure what you'd like me to do here. You can say things like:\n` +
+          `• "add @Person to this task"\n` +
+          `• "remove @Person from this task"\n` +
+          `• "reassign this to @Person"\n` +
+          `• "add another task: [description]"\n` +
+          `• "cancel this task"`
+      );
+    }
     return;
   }
 
