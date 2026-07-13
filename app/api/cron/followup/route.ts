@@ -27,7 +27,23 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Database error" }, { status: 500 });
   }
 
-  if (!dueTasks || dueTasks.length === 0) {
+  // Also catch active tasks that are 5+ days old (overdue escalation check)
+  const fiveDaysAgo = new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000);
+  const { data: overdueTasksRaw } = await supabase
+    .from("tasks")
+    .select("*")
+    .in("status", ["active", "revision_requested"])
+    .lt("created_at", fiveDaysAgo.toISOString())
+    .is("escalated_at", null);
+
+  // Merge with dueTasks, deduplicate by id
+  const allTaskIds = new Set((dueTasks ?? []).map(t => (t as Task).id));
+  const extraTasks = (overdueTasksRaw ?? []).filter(
+    t => !allTaskIds.has((t as Task).id)
+  );
+  const allTasksToProcess = [...(dueTasks ?? []), ...extraTasks] as Task[];
+
+  if (allTasksToProcess.length === 0) {
     return NextResponse.json({
       ok: true,
       message: "No tasks due for follow-up",
@@ -37,7 +53,7 @@ export async function GET(request: Request) {
 
   const results: FollowupResult[] = [];
 
-  for (const task of dueTasks as Task[]) {
+  for (const task of allTasksToProcess) {
     try {
       results.push(await sendFollowupForTask(supabase, task, { now }));
     } catch (err) {

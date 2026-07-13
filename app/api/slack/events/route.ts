@@ -1,8 +1,20 @@
 import { NextResponse } from "next/server";
 import { waitUntil } from "@vercel/functions";
-import { verifySlackSignature, getSlackUserName, postThreadReply, getSlackClient } from "@/lib/slack";
+import {
+  verifySlackSignature,
+  getSlackUserName,
+  postThreadReply,
+  getSlackClient,
+  sendDirectMessage,
+  getWorkspaceMembers,
+  downloadSlackFile,
+} from "@/lib/slack";
 import { createSupabaseAdmin } from "@/lib/supabase";
-import { parseTaskFromMessage } from "@/lib/openai-messages";
+import {
+  parseTaskFromMessage,
+  transcribeAudio,
+  parseVoiceTranscription,
+} from "@/lib/openai-messages";
 import { calculateNextFollowupAt } from "@/lib/followup-schedule";
 
 export const runtime = "nodejs";
@@ -59,6 +71,36 @@ async function processSlackEvent(event: Record<string, unknown>) {
   const monitoredChannelId = process.env.SLACK_CHANNEL_ID!;
   const brandonUserId = process.env.SLACK_BRANDON_USER_ID!;
 
+  // ── CASE 0: File/audio message uploaded ─────────────────────────────────────
+  if (
+    event.type === "message" &&
+    event.files &&
+    Array.isArray(event.files) &&
+    event.files.length > 0 &&
+    event.channel === monitoredChannelId &&
+    !event.thread_ts
+  ) {
+    const files = event.files as Array<Record<string, unknown>>;
+    const audioFile = files.find(f => {
+      const mimetype = (f.mimetype as string) ?? "";
+      const filetype = (f.filetype as string) ?? "";
+      return (
+        mimetype.startsWith("audio/") ||
+        filetype === "mp4" ||
+        filetype === "webm" ||
+        filetype === "ogg" ||
+        filetype === "m4a" ||
+        filetype === "mp3"
+      );
+    });
+
+    if (audioFile) {
+      console.log("[voice] audio file detected:", audioFile.name);
+      await handleVoiceMessage(event, audioFile, supabase, brandonUserId);
+      return;
+    }
+  }
+
   const isMention = event.type === "app_mention";
   const channelMatch = event.channel === monitoredChannelId;
   const noThread = !event.thread_ts;
@@ -110,24 +152,28 @@ async function handleNewTaskMention(
     return;
   }
 
-  const assigneeId = mentions[0];
-  console.log("[task] step 3 — assigneeId:", assigneeId, "senderId:", senderId);
+  console.log("[task] step 3 — mentions:", mentions, "senderId:", senderId);
 
-  let assigneeName: string, assignerName: string;
-  try {
-    [assigneeName, assignerName] = await Promise.all([
-      getSlackUserName(assigneeId),
-      getSlackUserName(senderId),
-    ]);
-    console.log("[task] step 4 — assigneeName:", assigneeName, "assignerName:", assignerName);
-  } catch (err) {
+  const results = await Promise.all([
+    getSlackUserName(senderId),
+    ...mentions.map(id => getSlackUserName(id)),
+  ]).catch(err => {
     console.error("[task] step 4 failed — getSlackUserName error:", err);
-    return;
-  }
+    return null;
+  });
+
+  if (!results) return;
+
+  const assignerName = results[0];
+  const assignees = mentions.map((id, i) => ({ id, name: results[i + 1] }));
+  const primaryAssignee = assignees[0];
+  const allAssigneeNames = assignees.map(a => a.name).join(" and ");
+
+  console.log("[task] step 4 — assignees:", allAssigneeNames, "assignerName:", assignerName);
 
   let parsed: { taskText: string; hasTask: boolean } | null = null;
   try {
-    parsed = await parseTaskFromMessage(cleanMessage, assigneeName);
+    parsed = await parseTaskFromMessage(cleanMessage, allAssigneeNames);
     console.log("[task] step 5 — parsed:", JSON.stringify(parsed));
   } catch (err) {
     console.error("[task] step 5 failed — parseTaskFromMessage error:", err);
@@ -138,12 +184,12 @@ async function handleNewTaskMention(
     await postThreadReply(
       channelId,
       threadTs,
-      `Got it ${assignerName}! But I couldn't identify a clear task. Try: \`@TaskBot @${assigneeName} needs to [specific task description]\``
+      `Got it ${assignerName}! But I couldn't identify a clear task. Try: \`@TaskBot @${primaryAssignee.name} needs to [specific task description]\``
     );
     return;
   }
 
-  const nextFollowupAt = calculateNextFollowupAt(0);
+  const nextFollowupAt = calculateNextFollowupAt(0, new Date(), process.env.TEAM_TIMEZONE ?? "UTC");
   console.log("[task] step 6 — inserting task into supabase, nextFollowupAt:", nextFollowupAt);
 
   const { data, error } = await supabase
@@ -151,8 +197,10 @@ async function handleNewTaskMention(
     .insert({
       task_text: parsed.taskText,
       raw_message: messageText,
-      assigned_to_id: assigneeId,
-      assigned_to_name: assigneeName,
+      assigned_to_id: primaryAssignee.id,
+      assigned_to_name: primaryAssignee.name,
+      assignee_ids: assignees.map(a => a.id),
+      assignee_names: assignees.map(a => a.name),
       assigned_by_id: senderId,
       assigned_by_name: assignerName,
       channel_id: channelId,
@@ -162,6 +210,7 @@ async function handleNewTaskMention(
       followup_count: 0,
       max_followups: 5,
       next_followup_at: nextFollowupAt?.toISOString() ?? null,
+      assignee_timezone: process.env.TEAM_TIMEZONE ?? "UTC",
     })
     .select()
     .single();
@@ -173,10 +222,12 @@ async function handleNewTaskMention(
 
   console.log("[task] step 7 — task saved, id:", data?.id, "posting confirmation");
 
+  const allMentions = assignees.map(a => `<@${a.id}>`).join(", ");
+
   await postThreadReply(
     channelId,
     threadTs,
-    `✅ Got it! I've logged this task for *${assigneeName}*:\n> ${parsed.taskText}\n\nI'll follow up automatically until it's confirmed complete. ${assigneeName}, just reply *"done"* in this thread when you've finished.`
+    `✅ Got it! I've logged this task for *${allAssigneeNames}*:\n> ${parsed.taskText}\n\nI'll follow up automatically until it's confirmed complete. ${allMentions}, just reply *"done"* in this thread when you've finished.`
   );
 
   console.log("[task] done — task created successfully");
@@ -193,8 +244,78 @@ async function handleThreadReply(
 
   console.log("[reply] looking up task for thread_ts:", threadTs, "userId:", userId);
 
-  // Match the task for this thread regardless of status, so late replies,
-  // questions, and mistakes still show up on the dashboard timeline
+  // ── CHECK: Is this a reply to a pending voice task (Brandon clarifying assignee)? ──
+  const { data: pendingVoice } = await supabase
+    .from("pending_voice_tasks")
+    .select("*")
+    .eq("thread_ts", threadTs)
+    .eq("resolved", false)
+    .maybeSingle();
+
+  if (pendingVoice && userId === process.env.SLACK_BRANDON_USER_ID) {
+    const rawReplyText = (event.text as string) ?? "";
+    const replyMentions = [...rawReplyText.matchAll(/<@([A-Z0-9]+)>/g)]
+      .map(m => m[1])
+      .filter(id => id !== process.env.SLACK_BRANDON_USER_ID);
+
+    if (replyMentions.length > 0) {
+      const teamMembers = await getWorkspaceMembers();
+      const assignerName = await getSlackUserName(userId);
+      const nextFollowupAt = calculateNextFollowupAt(
+        0,
+        new Date(),
+        process.env.TEAM_TIMEZONE ?? "UTC"
+      );
+
+      const matchedMembers = replyMentions.map(id => {
+        const member = teamMembers.find(m => m.id === id);
+        return member ?? { id, name: id };
+      });
+
+      const taskInserts = matchedMembers.map(member => ({
+        task_text: pendingVoice.task_text,
+        raw_message: pendingVoice.transcription,
+        voice_transcription: pendingVoice.transcription,
+        assigned_to_id: member.id,
+        assigned_to_name: member.name,
+        assignee_ids: [member.id],
+        assignee_names: [member.name],
+        assigned_by_id: pendingVoice.created_by_id,
+        assigned_by_name: pendingVoice.created_by_name,
+        channel_id: pendingVoice.channel_id,
+        message_ts: pendingVoice.message_ts,
+        thread_ts: pendingVoice.thread_ts,
+        status: "active",
+        followup_count: 0,
+        max_followups: 5,
+        next_followup_at: nextFollowupAt?.toISOString() ?? null,
+        assignee_timezone: process.env.TEAM_TIMEZONE ?? "UTC",
+      }));
+
+      await supabase.from("tasks").insert(taskInserts);
+
+      await supabase
+        .from("pending_voice_tasks")
+        .update({ resolved: true })
+        .eq("id", pendingVoice.id);
+
+      const assigneeMentions = matchedMembers.map(m => `<@${m.id}>`).join(", ");
+      const assigneeNames = matchedMembers.map(m => m.name).join(", ");
+
+      await postThreadReply(
+        pendingVoice.channel_id,
+        pendingVoice.thread_ts,
+        `✅ Got it! Task assigned to ${assigneeMentions}.\n\n` +
+          `*Task:* ${pendingVoice.task_text}\n\n` +
+          `I'll follow up with ${assigneeNames} every 24 hours. Reply *"done"* when complete.`
+      );
+
+      console.log("[voice] pending task resolved, assigned to:", assigneeNames);
+      return;
+    }
+  }
+
+  // Match the task for this thread regardless of status
   const { data: task } = await supabase
     .from("tasks")
     .select("*")
@@ -212,7 +333,7 @@ async function handleThreadReply(
   const isAssignee = assigneeIds.includes(userId);
   const isOpen = task.status === "active" || task.status === "revision_requested";
 
-  // Closed or under-review tasks: just log the reply for dashboard visibility
+  // Closed tasks: just log the reply for dashboard visibility
   if (!isOpen) {
     if (rawText.length > 0) {
       const authorName = isAssignee ? task.assigned_to_name : await getSlackUserName(userId);
@@ -240,7 +361,8 @@ async function handleThreadReply(
     await supabase
       .from("tasks")
       .update({
-        status: "pending_review",
+        status: "completed",
+        completed_at: new Date().toISOString(),
         next_followup_at: null,
       })
       .eq("id", task.id);
@@ -248,7 +370,7 @@ async function handleThreadReply(
     await postThreadReply(
       task.channel_id,
       task.thread_ts,
-      `Got it! I've flagged this for ${task.assigned_by_name}'s review. Follow-ups are paused while they check your work.`
+      `🎉 Great work ${task.assigned_to_name}! Task marked as *done*:\n> ${task.task_text}\n\nNice one — I've stopped the follow-ups.`
     );
 
     await supabase.from("task_comments").insert([
@@ -263,19 +385,18 @@ async function handleThreadReply(
         task_id: task.id,
         author_type: "system",
         author_name: "System",
-        content: `${task.assigned_to_name} marked this done. Pending ${task.assigned_by_name}'s review.`,
+        content: `${task.assigned_to_name} marked this task as done.`,
         sent_to_slack: true,
       },
     ]);
 
     const brandonUserId = process.env.SLACK_BRANDON_USER_ID!;
-    const { sendDirectMessage } = await import("@/lib/slack");
     await sendDirectMessage(
       brandonUserId,
-      `👀 *Task Ready for Review*\n\n*Assignee:* ${task.assigned_to_name}\n*Task:* ${task.task_text}\n*Follow-ups sent:* ${task.followup_count}\n\n${task.assigned_to_name} says it's done. Review and approve or send revisions from the dashboard.`
+      `✅ *Task Completed*\n\n*Assignee:* ${task.assigned_to_name}\n*Task:* ${task.task_text}\n\nThis task has been marked as done.`
     );
 
-    console.log("[reply] task flagged for review:", task.id);
+    console.log("[reply] task marked completed:", task.id);
     return;
   }
 
@@ -291,4 +412,182 @@ async function handleThreadReply(
     });
     console.log("[reply] thread reply logged, follow-ups continue");
   }
+}
+
+async function handleVoiceMessage(
+  event: Record<string, unknown>,
+  audioFile: Record<string, unknown>,
+  supabase: ReturnType<typeof createSupabaseAdmin>,
+  brandonUserId: string
+) {
+  const channelId = event.channel as string;
+  const messageTs = event.ts as string;
+  const threadTs = messageTs;
+  const senderId = event.user as string;
+
+  await postThreadReply(
+    channelId,
+    threadTs,
+    "🎙️ Got your voice note! Transcribing now..."
+  );
+
+  const fileUrl =
+    (audioFile.url_private_download as string) ||
+    (audioFile.url_private as string);
+
+  if (!fileUrl) {
+    await postThreadReply(
+      channelId,
+      threadTs,
+      "⚠️ I couldn't access the audio file. Make sure the bot has file access permissions."
+    );
+    return;
+  }
+
+  const audioBuffer = await downloadSlackFile(fileUrl);
+  if (!audioBuffer) {
+    await postThreadReply(
+      channelId,
+      threadTs,
+      "⚠️ Failed to download the audio file. Please try sending it again."
+    );
+    return;
+  }
+
+  const fileName = (audioFile.name as string) ?? "audio.mp4";
+  const transcription = await transcribeAudio(audioBuffer, fileName);
+
+  if (!transcription) {
+    await postThreadReply(
+      channelId,
+      threadTs,
+      "⚠️ I couldn't transcribe the audio. The file may be too short or unclear. Please try again."
+    );
+    return;
+  }
+
+  console.log("[voice] transcription:", transcription.slice(0, 200));
+
+  const teamMembers = await getWorkspaceMembers();
+  const parsed = await parseVoiceTranscription(transcription, teamMembers);
+
+  if (!parsed || !parsed.hasTask) {
+    await postThreadReply(
+      channelId,
+      threadTs,
+      `📝 Here's what I heard:\n\n_"${transcription}"_\n\nI couldn't identify a clear task here. Could you clarify what needs to be done and who should do it?`
+    );
+    return;
+  }
+
+  // Check for @mentions in the message text itself
+  const messageText = (event.text as string) ?? "";
+  const mentionPattern = /<@([A-Z0-9]+)>/g;
+  const slackMentions = [...messageText.matchAll(mentionPattern)]
+    .map(m => m[1])
+    .filter(id => id !== brandonUserId && id !== process.env.SLACK_BOT_USER_ID);
+
+  const matchedMembers: Array<{ id: string; name: string }> = [];
+
+  // First: use explicit Slack @mentions
+  for (const slackId of slackMentions) {
+    const member = teamMembers.find(m => m.id === slackId);
+    if (member) matchedMembers.push(member);
+  }
+
+  // Second: match names mentioned in the voice recording
+  if (matchedMembers.length === 0 && parsed.mentionedNames.length > 0) {
+    for (const mentionedName of parsed.mentionedNames) {
+      const matched = teamMembers.find(
+        m =>
+          m.name.toLowerCase().includes(mentionedName.toLowerCase()) ||
+          mentionedName.toLowerCase().includes(m.name.toLowerCase())
+      );
+      if (matched && !matchedMembers.find(x => x.id === matched.id)) {
+        matchedMembers.push(matched);
+      }
+    }
+  }
+
+  // No assignee found — ask Brandon to clarify
+  if (matchedMembers.length === 0) {
+    const assignerName = await getSlackUserName(senderId);
+
+    await supabase.from("pending_voice_tasks").insert({
+      channel_id: channelId,
+      thread_ts: threadTs,
+      message_ts: messageTs,
+      transcription,
+      task_text: parsed.taskText,
+      summary: parsed.summary,
+      mentioned_names: parsed.mentionedNames,
+      created_by_id: senderId,
+      created_by_name: assignerName,
+    });
+
+    await postThreadReply(
+      channelId,
+      threadTs,
+      `📝 Transcribed your voice note!\n\n*Task:* ${parsed.summary}\n\n` +
+        `<@${brandonUserId}> — who should this be assigned to? ` +
+        `Please @mention them in a reply here and I'll create the task automatically.`
+    );
+    return;
+  }
+
+  // Create tasks for all matched assignees
+  const assignerName = await getSlackUserName(senderId);
+  const nextFollowupAt = calculateNextFollowupAt(
+    0,
+    new Date(),
+    process.env.TEAM_TIMEZONE ?? "UTC"
+  );
+
+  const taskInserts = matchedMembers.map(member => ({
+    task_text: parsed.taskText,
+    raw_message: transcription,
+    voice_transcription: transcription,
+    assigned_to_id: member.id,
+    assigned_to_name: member.name,
+    assignee_ids: [member.id],
+    assignee_names: [member.name],
+    assigned_by_id: senderId,
+    assigned_by_name: assignerName,
+    channel_id: channelId,
+    message_ts: messageTs,
+    thread_ts: threadTs,
+    status: "active",
+    followup_count: 0,
+    max_followups: 5,
+    next_followup_at: nextFollowupAt?.toISOString() ?? null,
+    assignee_timezone: process.env.TEAM_TIMEZONE ?? "UTC",
+  }));
+
+  const { error } = await supabase.from("tasks").insert(taskInserts);
+
+  if (error) {
+    console.error("[voice] task insert failed:", error);
+    await postThreadReply(
+      channelId,
+      threadTs,
+      "⚠️ Task was understood but failed to save. Please try again."
+    );
+    return;
+  }
+
+  const assigneeMentions = matchedMembers.map(m => `<@${m.id}>`).join(", ");
+  const assigneeNames = matchedMembers.map(m => m.name).join(", ");
+
+  await postThreadReply(
+    channelId,
+    threadTs,
+    `✅ *Task created from voice note!*\n\n` +
+      `*Assigned to:* ${assigneeMentions}\n` +
+      `*Task:* ${parsed.taskText}\n\n` +
+      `_"${transcription.slice(0, 200)}${transcription.length > 200 ? "..." : ""}"_\n\n` +
+      `I'll follow up with ${assigneeNames} every 24 hours (weekends excluded). ` +
+      `Reply *"done"* in this thread when complete.`
+  );
+
+  console.log("[voice] tasks created for:", assigneeNames, "task:", parsed.taskText.slice(0, 80));
 }

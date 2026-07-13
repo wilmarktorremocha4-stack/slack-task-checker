@@ -35,34 +35,28 @@ function getEmployeeColor(name: string): string {
 }
 
 const STATUS = {
-  active:             { label: "Active",        badge: "bg-blue-100 text-blue-700 border-blue-200",       dot: "bg-blue-500" },
-  pending_review:     { label: "Needs Review",  badge: "bg-amber-100 text-amber-700 border-amber-200",    dot: "bg-amber-500" },
-  revision_requested: { label: "Revision Sent", badge: "bg-orange-100 text-orange-700 border-orange-200", dot: "bg-orange-500" },
+  active:             { label: "Active",        badge: "bg-blue-100 text-blue-700 border-blue-200",          dot: "bg-blue-500" },
+  revision_requested: { label: "Revision Sent", badge: "bg-orange-100 text-orange-700 border-orange-200",    dot: "bg-orange-500" },
   completed:          { label: "Done",          badge: "bg-emerald-100 text-emerald-700 border-emerald-200", dot: "bg-emerald-500" },
-  escalated:          { label: "Escalated",     badge: "bg-rose-100 text-rose-700 border-rose-200",       dot: "bg-rose-500" },
-  cancelled:          { label: "Cancelled",     badge: "bg-slate-100 text-slate-500 border-slate-200",    dot: "bg-slate-400" },
+  cancelled:          { label: "Cancelled",     badge: "bg-slate-100 text-slate-500 border-slate-200",       dot: "bg-slate-400" },
 } as const;
 
 // "By Employee" lives in the header button only — not in this tab row
 const FILTERS = [
   { key: "all",                label: "All" },
-  { key: "pending_review",     label: "Needs Review" },
   { key: "active",             label: "Active" },
   { key: "revision_requested", label: "Revision Sent" },
   { key: "completed",          label: "Done" },
-  { key: "escalated",          label: "Escalated" },
   { key: "cancelled",          label: "Cancelled" },
 ];
 
 // Per-tab color styles for inactive state
 const FILTER_COLORS: Record<string, { tab: string; badge: string }> = {
-  all:                 { tab: "bg-white border-slate-300 text-slate-600 hover:bg-slate-50 hover:border-slate-400",          badge: "bg-slate-100 text-slate-500" },
-  pending_review:      { tab: "bg-amber-50 border-amber-300 text-amber-700 hover:bg-amber-100 hover:border-amber-400",       badge: "bg-amber-100 text-amber-600" },
-  active:              { tab: "bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100 hover:border-blue-400",            badge: "bg-blue-100 text-blue-600" },
-  revision_requested:  { tab: "bg-orange-50 border-orange-300 text-orange-700 hover:bg-orange-100 hover:border-orange-400", badge: "bg-orange-100 text-orange-600" },
+  all:                 { tab: "bg-white border-slate-300 text-slate-600 hover:bg-slate-50 hover:border-slate-400",             badge: "bg-slate-100 text-slate-500" },
+  active:              { tab: "bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100 hover:border-blue-400",              badge: "bg-blue-100 text-blue-600" },
+  revision_requested:  { tab: "bg-orange-50 border-orange-300 text-orange-700 hover:bg-orange-100 hover:border-orange-400",   badge: "bg-orange-100 text-orange-600" },
   completed:           { tab: "bg-emerald-50 border-emerald-300 text-emerald-700 hover:bg-emerald-100 hover:border-emerald-400", badge: "bg-emerald-100 text-emerald-600" },
-  escalated:           { tab: "bg-rose-50 border-rose-300 text-rose-700 hover:bg-rose-100 hover:border-rose-400",            badge: "bg-rose-100 text-rose-600" },
-  cancelled:           { tab: "bg-slate-50 border-slate-300 text-slate-500 hover:bg-slate-100 hover:border-slate-400",      badge: "bg-slate-100 text-slate-400" },
+  cancelled:           { tab: "bg-slate-50 border-slate-300 text-slate-500 hover:bg-slate-100 hover:border-slate-400",        badge: "bg-slate-100 text-slate-400" },
 };
 
 function timeAgo(d: string) {
@@ -94,7 +88,7 @@ function nextInLabel(d: string | null): { label: string; isOverdue: boolean } | 
 }
 
 function sortByStatus(tasks: TaskWithComments[]) {
-  const order = ["pending_review", "revision_requested", "active", "escalated", "completed", "cancelled"];
+  const order = ["revision_requested", "active", "completed", "cancelled"];
   return [...tasks].sort((a, b) => {
     const ai = order.indexOf(a.status);
     const bi = order.indexOf(b.status);
@@ -276,8 +270,7 @@ function TaskCard({ task, expanded, onToggle, onAction, userMap, accentColor, la
   const [working, setWorking] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<"cancel" | "followup_now" | "reopen" | null>(null);
   const threadRef = useRef<HTMLDivElement>(null);
-  const cfg = STATUS[task.status] ?? STATUS.active;
-  const isPendingReview = task.status === "pending_review";
+  const cfg = STATUS[task.status as keyof typeof STATUS] ?? STATUS.active;
   const isOpen = task.status === "active" || task.status === "revision_requested";
   const isActive = task.status === "active";
   const isClosed = task.status === "completed" || task.status === "escalated" || task.status === "cancelled";
@@ -318,9 +311,7 @@ function TaskCard({ task, expanded, onToggle, onAction, userMap, accentColor, la
 
   return (
     <div
-      className={`rounded-2xl transition-all duration-200 ${CARD} ${CARD_HOVER} ${
-        isPendingReview ? "ring-2 ring-amber-400/60 border-amber-300" : ""
-      }`}
+      className={`rounded-2xl transition-all duration-200 ${CARD} ${CARD_HOVER}`}
       style={accentColor ? { borderLeft: `4px solid ${accentColor}` } : undefined}
     >
       {confirm === "cancel" && (
@@ -345,10 +336,9 @@ function TaskCard({ task, expanded, onToggle, onAction, userMap, accentColor, la
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1.5 flex-wrap">
             <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-0.5 rounded-full border ${cfg.badge}`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot} ${isPendingReview ? "animate-pulse" : ""}`} />
+              <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
               {cfg.label}
             </span>
-            {isPendingReview && <span className="text-xs font-medium text-amber-600">Awaiting your review</span>}
             {replyCount > 0 && (
               <span className="inline-flex items-center gap-1 text-xs font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full">
                 <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
@@ -401,34 +391,6 @@ function TaskCard({ task, expanded, onToggle, onAction, userMap, accentColor, la
               </p>
             )}
           </div>
-
-          {/* pending_review actions */}
-          {isPendingReview && (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 text-sm text-amber-700 font-medium bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5">
-                <span>👀</span>
-                <span>{assigneeDisplay} says this is done. Approve it, or describe what needs revising.</span>
-              </div>
-              <textarea
-                value={revisionText}
-                onChange={e => setRevisionText(e.target.value)}
-                placeholder="Optional: add a message to Slack (e.g. 'Thanks, great work!') — or describe what needs changing to request a revision..."
-                className={`${INPUT_CLS} resize-none`}
-                rows={3}
-              />
-              <div className="flex gap-3">
-                <button disabled={!!working} onClick={() => handle("approve")} className="flex-1 inline-flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 hover:-translate-y-0.5 disabled:opacity-50 text-white font-semibold text-sm py-2.5 rounded-xl shadow-lg shadow-emerald-500/25 transition-all active:scale-[0.98]">
-                  <IconCheck /> {working === "approve" ? "Approving..." : "Approve & Close"}
-                </button>
-                <button disabled={!!working || !revisionText.trim()} onClick={() => handle("revision")} className="flex-1 inline-flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 hover:-translate-y-0.5 disabled:opacity-50 text-white font-semibold text-sm py-2.5 rounded-xl shadow-lg shadow-orange-500/25 transition-all active:scale-[0.98]">
-                  <IconEdit /> {working === "revision" ? "Sending..." : "Request Revision"}
-                </button>
-              </div>
-              <button disabled={!!working} onClick={() => setConfirm("cancel")} className="w-full inline-flex items-center justify-center gap-2 bg-white border border-rose-300 hover:bg-rose-50 text-rose-600 font-medium text-sm py-2.5 rounded-xl transition-all disabled:opacity-50 active:scale-[0.98]">
-                <IconTrash /> Cancel Task
-              </button>
-            </div>
-          )}
 
           {/* Open task actions */}
           {isOpen && (
@@ -521,19 +483,17 @@ function EmployeeView({ tasks, expandedId, onToggle, onAction, userMap, readStat
 
         const total = empTasks.length;
         const active = empTasks.filter(t => t.status === "active").length;
-        const pending = empTasks.filter(t => t.status === "pending_review").length;
         const revision = empTasks.filter(t => t.status === "revision_requested").length;
         const done = empTasks.filter(t => t.status === "completed").length;
-        const escalated = empTasks.filter(t => t.status === "escalated").length;
         const cancelled = empTasks.filter(t => t.status === "cancelled").length;
         const completionRate = total > 0 ? Math.round((done / total) * 100) : 0;
         const completedTasks = empTasks.filter(t => t.status === "completed");
         const avgFollowups = completedTasks.length > 0
           ? (completedTasks.reduce((s, t) => s + t.followup_count, 0) / completedTasks.length).toFixed(1)
           : "—";
-        const openTasks = active + pending + revision;
+        const openTasks = active + revision;
 
-        const empCounts: Record<string, number> = { all: total, active, pending_review: pending, revision_requested: revision, completed: done, escalated, cancelled };
+        const empCounts: Record<string, number> = { all: total, active, revision_requested: revision, completed: done, cancelled };
         const visibleTasks = empFilter === "all" ? empTasks : empTasks.filter(t => t.status === empFilter);
         const sortedTasks = applySort(visibleTasks, empSort);
 
@@ -559,11 +519,9 @@ function EmployeeView({ tasks, expandedId, onToggle, onAction, userMap, readStat
 
                 {/* Status pill row */}
                 <div className="flex gap-2 text-xs flex-wrap">
-                  {active > 0    && <span className="px-2.5 py-1 rounded-full bg-blue-100 text-blue-700 border border-blue-200">{active} active</span>}
-                  {pending > 0   && <span className="px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 border border-amber-200">{pending} review</span>}
-                  {revision > 0  && <span className="px-2.5 py-1 rounded-full bg-orange-100 text-orange-700 border border-orange-200">{revision} revision</span>}
-                  {done > 0      && <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">{done} done</span>}
-                  {escalated > 0 && <span className="px-2.5 py-1 rounded-full bg-rose-100 text-rose-700 border border-rose-200">{escalated} escalated</span>}
+                  {active > 0   && <span className="px-2.5 py-1 rounded-full bg-blue-100 text-blue-700 border border-blue-200">{active} active</span>}
+                  {revision > 0 && <span className="px-2.5 py-1 rounded-full bg-orange-100 text-orange-700 border border-orange-200">{revision} revision</span>}
+                  {done > 0     && <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">{done} done</span>}
                   {cancelled > 0 && <span className="px-2.5 py-1 rounded-full bg-slate-100 text-slate-500 border border-slate-200">{cancelled} cancelled</span>}
                 </div>
               </div>
@@ -590,7 +548,7 @@ function EmployeeView({ tasks, expandedId, onToggle, onAction, userMap, readStat
                 <div className="bg-emerald-50 rounded-xl px-3 py-2.5 border border-emerald-200 shadow-sm">
                   <p className="text-emerald-500 text-xs mb-0.5 font-medium">Completed</p>
                   <p className="text-emerald-900 font-bold text-lg leading-none">{done}</p>
-                  <p className="text-emerald-500 text-xs mt-1">{escalated > 0 ? `${escalated} escalated` : "no escalations"}</p>
+                  <p className="text-emerald-500 text-xs mt-1">{done} of {total} tasks</p>
                 </div>
               </div>
             </div>
@@ -1056,10 +1014,8 @@ export default function DashboardClient({ initialTasks, userEmail }: {
   const counts = {
     all: tasks.length,
     active: tasks.filter(t => t.status === "active").length,
-    pending_review: tasks.filter(t => t.status === "pending_review").length,
     revision_requested: tasks.filter(t => t.status === "revision_requested").length,
     completed: tasks.filter(t => t.status === "completed").length,
-    escalated: tasks.filter(t => t.status === "escalated").length,
     cancelled: tasks.filter(t => t.status === "cancelled").length,
   } as Record<string, number>;
 
@@ -1123,13 +1079,12 @@ export default function DashboardClient({ initialTasks, userEmail }: {
         </div>
 
         {/* Stats — solid white cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
           {[
-            { label: "Active",       count: counts.active,             color: "text-blue-600" },
-            { label: "Needs Review", count: counts.pending_review,     color: "text-amber-600" },
-            { label: "Revision",     count: counts.revision_requested, color: "text-orange-600" },
-            { label: "Done",         count: counts.completed,          color: "text-emerald-600" },
-            { label: "Escalated",    count: counts.escalated,          color: "text-rose-600" },
+            { label: "Active",    count: counts.active,             color: "text-blue-600" },
+            { label: "Revision",  count: counts.revision_requested, color: "text-orange-600" },
+            { label: "Done",      count: counts.completed,          color: "text-emerald-600" },
+            { label: "Cancelled", count: counts.cancelled,          color: "text-slate-500" },
           ].map((s, i) => (
             <div key={s.label} className={`${CARD} rounded-2xl p-4 text-center anim-rise hover:-translate-y-0.5 transition-all duration-200`} style={{ animationDelay: `${i * 60}ms` }}>
               <p className="text-slate-500 text-xs mb-1 font-medium">{s.label}</p>
@@ -1158,9 +1113,6 @@ export default function DashboardClient({ initialTasks, userEmail }: {
                   <span className={`text-xs px-1.5 py-0.5 rounded-full ${isActive ? "bg-white/25 text-white" : fc.badge}`}>
                     {counts[f.key]}
                   </span>
-                )}
-                {f.key === "pending_review" && counts.pending_review > 0 && (
-                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
                 )}
               </button>
             );

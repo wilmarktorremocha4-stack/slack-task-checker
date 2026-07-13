@@ -108,6 +108,94 @@ Rules:
   }
 }
 
+export async function transcribeAudio(
+  audioBuffer: Buffer,
+  fileName: string
+): Promise<string | null> {
+  try {
+    const openai = getOpenAIClient();
+
+    const file = new File([audioBuffer.buffer as ArrayBuffer], fileName, {
+      type: fileName.endsWith(".webm")
+        ? "audio/webm"
+        : fileName.endsWith(".mp4")
+        ? "audio/mp4"
+        : fileName.endsWith(".ogg")
+        ? "audio/ogg"
+        : "audio/mpeg",
+    });
+
+    const transcription = await openai.audio.transcriptions.create({
+      file,
+      model: "whisper-1",
+      language: "en",
+    });
+
+    return transcription.text?.trim() ?? null;
+  } catch (err) {
+    console.error("[whisper] transcription failed:", err);
+    return null;
+  }
+}
+
+export async function parseVoiceTranscription(
+  transcription: string,
+  knownTeamMembers: Array<{ id: string; name: string }>
+): Promise<{
+  hasTask: boolean;
+  taskText: string;
+  mentionedNames: string[];
+  assigneeCleared: boolean;
+  summary: string;
+} | null> {
+  try {
+    const openai = getOpenAIClient();
+    const memberList = knownTeamMembers.map(m => m.name).join(", ");
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        {
+          role: "system",
+          content: `You parse voice recording transcriptions from a business owner assigning tasks to their team.
+
+Known team members: ${memberList}
+
+Return JSON with these fields:
+{
+  "hasTask": boolean,
+  "taskText": "clear, complete description of the task to be done. Include all details, deadlines, and context mentioned.",
+  "mentionedNames": ["name1", "name2"],
+  "assigneeCleared": boolean,
+  "summary": "1-2 sentence summary of the task for the thread reply"
+}
+
+Rules:
+- hasTask: true if any work assignment or action item is mentioned
+- taskText: comprehensive task description, preserve all specifics from the recording
+- mentionedNames: any names from the known team member list that appear in the transcription
+- assigneeCleared: true if it is clear who should do the task, false if ambiguous
+- summary: friendly summary to post back to Slack so the team knows the task was understood
+
+If no task is found, set hasTask to false and all other fields to empty/false.`,
+        },
+        {
+          role: "user",
+          content: `Transcription: "${transcription}"`,
+        },
+      ],
+      max_tokens: 500,
+      temperature: 0,
+      response_format: { type: "json_object" },
+    });
+
+    return JSON.parse(response.choices[0]?.message?.content ?? "{}");
+  } catch (err) {
+    console.error("[openai] voice parse failed:", err);
+    return null;
+  }
+}
+
 export async function generateEscalationMessage(options: {
   taskText: string;
   assigneeName: string;

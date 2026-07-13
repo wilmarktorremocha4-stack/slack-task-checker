@@ -1,30 +1,41 @@
-export const FOLLOWUP_SCHEDULE_HOURS = [
-  24,   // Follow-up 1: wait 24 hours after task creation
-  24,   // Follow-up 2: wait 24 hours after follow-up 1
-  12,   // Follow-up 3: wait 12 hours after follow-up 2
-  6,    // Follow-up 4: wait 6 hours after follow-up 3
-  4,    // Follow-up 5: wait 4 hours after follow-up 4
-];
+// All follow-ups are 24 hours apart (uniform — no escalating hours)
+// Weekends are skipped: if the next follow-up falls on Sat or Sun,
+// it is pushed forward to Monday at the same time of day.
+// The assignee's timezone is respected when checking for weekends.
 
-export const MAX_FOLLOWUPS = FOLLOWUP_SCHEDULE_HOURS.length; // 5
+export const FOLLOWUP_INTERVAL_HOURS = 24;
+export const MAX_FOLLOWUPS = 5;
 
-export function getNextFollowupDelayHours(
-  currentFollowupCount: number
-): number | null {
-  if (currentFollowupCount >= MAX_FOLLOWUPS) return null;
-  return FOLLOWUP_SCHEDULE_HOURS[currentFollowupCount];
+function skipWeekend(date: Date, timezone: string): Date {
+  let result = new Date(date);
+
+  const localDay = new Date(
+    result.toLocaleString("en-US", { timeZone: timezone })
+  ).getDay();
+
+  if (localDay === 6) {
+    // Saturday → push to Monday (add 2 days)
+    result = new Date(result.getTime() + 2 * 24 * 60 * 60 * 1000);
+  } else if (localDay === 0) {
+    // Sunday → push to Monday (add 1 day)
+    result = new Date(result.getTime() + 1 * 24 * 60 * 60 * 1000);
+  }
+
+  return result;
 }
 
 export function calculateNextFollowupAt(
   currentFollowupCount: number,
-  fromDate: Date = new Date()
+  fromDate: Date = new Date(),
+  timezone: string = "UTC"
 ): Date | null {
-  const delayHours = getNextFollowupDelayHours(currentFollowupCount);
-  if (delayHours === null) return null;
+  if (currentFollowupCount >= MAX_FOLLOWUPS) return null;
 
-  const next = new Date(fromDate);
-  next.setHours(next.getHours() + delayHours);
-  return next;
+  const candidate = new Date(
+    fromDate.getTime() + FOLLOWUP_INTERVAL_HOURS * 60 * 60 * 1000
+  );
+
+  return skipWeekend(candidate, timezone);
 }
 
 export function getFollowupUrgency(
@@ -35,4 +46,8 @@ export function getFollowupUrgency(
   if (followupNumber === 3) return "firm";
   if (followupNumber === 4) return "urgent";
   return "final";
+}
+
+export function getNextFollowupDelayHours(): number {
+  return FOLLOWUP_INTERVAL_HOURS;
 }

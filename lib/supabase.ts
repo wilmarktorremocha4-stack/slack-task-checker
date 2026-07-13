@@ -30,6 +30,10 @@ export interface Task {
   last_followup_at: string | null;
   completed_at: string | null;
   escalated_at: string | null;
+  assignee_timezone: string | null;
+  voice_transcription: string | null;
+  audio_file_url: string | null;
+  pending_assignee: boolean | null;
   created_at: string;
   updated_at: string;
 }

@@ -109,6 +109,59 @@ export function slackMention(userId: string): string {
   return `<@${userId}>`;
 }
 
+export async function getWorkspaceMembers(): Promise<
+  Array<{ id: string; name: string }>
+> {
+  try {
+    const slack = getSlackClient();
+    const result = await slack.users.list({ limit: 200 });
+    return (result.members ?? [])
+      .filter(
+        m =>
+          !m.is_bot &&
+          !m.deleted &&
+          m.id !== "USLACKBOT" &&
+          m.id !== process.env.SLACK_BRANDON_USER_ID
+      )
+      .map(m => ({
+        id: m.id!,
+        name:
+          m.profile?.display_name ||
+          m.profile?.real_name ||
+          m.name ||
+          m.id!,
+      }));
+  } catch (err) {
+    console.error("[slack] getWorkspaceMembers failed:", err);
+    return [];
+  }
+}
+
+export async function downloadSlackFile(
+  fileUrl: string
+): Promise<Buffer | null> {
+  try {
+    const response = await fetch(fileUrl, {
+      headers: {
+        Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}`,
+      },
+    });
+    if (!response.ok) {
+      console.error(
+        "[slack] file download failed:",
+        response.status,
+        response.statusText
+      );
+      return null;
+    }
+    const arrayBuffer = await response.arrayBuffer();
+    return Buffer.from(arrayBuffer);
+  } catch (err) {
+    console.error("[slack] downloadSlackFile failed:", err);
+    return null;
+  }
+}
+
 export async function sendDirectMessage(
   userId: string,
   text: string

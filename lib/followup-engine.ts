@@ -53,20 +53,35 @@ export async function sendFollowupForTask(
 
   const maxFollowups = task.followup_schedule ? task.followup_schedule.length : MAX_FOLLOWUPS;
 
-  if (newFollowupCount > maxFollowups) {
-    const escalationMessage = await generateEscalationMessage({
-      taskText: task.task_text,
-      assigneeName: task.assigned_to_name,
-      channelId: task.channel_id,
-      threadTs: task.thread_ts,
-      followupsSent: task.followup_count,
-    });
+  const taskAgeMs = now.getTime() - new Date(task.created_at).getTime();
+  const taskAgeDays = taskAgeMs / (1000 * 60 * 60 * 24);
+  const isOverdue = taskAgeDays >= 5;
+  const maxFollowupsReached = newFollowupCount > maxFollowups;
 
-    await sendDirectMessage(brandonUserId, escalationMessage);
+  if (maxFollowupsReached || isOverdue) {
+    const escalationReason = isOverdue
+      ? `not completed after ${Math.floor(taskAgeDays)} days`
+      : `no response after ${task.followup_count} follow-ups`;
 
-    const assigneeMentions = (task.assignee_ids?.length ? task.assignee_ids : [task.assigned_to_id])
-      .map(id => slackMention(id))
-      .join(" ");
+    const threadTsForLink = task.thread_ts.replace(".", "");
+    const slackWorkspace = process.env.SLACK_WORKSPACE_DOMAIN ?? "app";
+    const threadLink = `https://${slackWorkspace}.slack.com/archives/${task.channel_id}/p${threadTsForLink}`;
+
+    const escalationMsg =
+      `🚨 *Task Escalation — Action Required*\n\n` +
+      `*Assignee:* ${task.assignee_names?.join(", ") ?? task.assigned_to_name}\n` +
+      `*Task:* ${task.task_text}\n` +
+      `*Reason:* This task was ${escalationReason}\n` +
+      `*Created:* ${new Date(task.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}\n\n` +
+      `<${threadLink}|View the original thread>\n\n` +
+      `You may want to follow up with them directly.`;
+
+    await sendDirectMessage(brandonUserId, escalationMsg);
+
+    const assigneeMentions =
+      (task.assignee_ids?.length ? task.assignee_ids : [task.assigned_to_id])
+        .map((id: string) => slackMention(id))
+        .join(" ");
 
     await postColoredMessage(
       task.channel_id,
@@ -89,7 +104,7 @@ export async function sendFollowupForTask(
     await supabase.from("followup_logs").insert({
       task_id: task.id,
       followup_number: newFollowupCount,
-      message_sent: escalationMessage,
+      message_sent: escalationMsg,
       was_escalation: true,
     });
 
@@ -112,7 +127,7 @@ export async function sendFollowupForTask(
 
   // Determine next follow-up time for inclusion in message context
   const nextFollowupAt = getCustomNextFollowupAt(task, newFollowupCount)
-    ?? calculateNextFollowupAt(newFollowupCount, now);
+    ?? calculateNextFollowupAt(newFollowupCount, now, task.assignee_timezone ?? "UTC");
   const nextFollowupHuman = nextFollowupAt ? humanReadableDate(nextFollowupAt.toISOString()) : null;
 
   const followupMessage = await generateFollowupMessage({
