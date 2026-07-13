@@ -288,7 +288,7 @@ export async function parseThreadCommand(options: {
   existingAssigneeNames: string[];
   teamMemberNames: string[];
 }): Promise<{
-  intent: "add_assignee" | "remove_assignee" | "reassign" | "add_task" | "cancel_task" | "unknown";
+  intent: "add_assignee" | "remove_assignee" | "reassign" | "add_task" | "cancel_task" | "cancel_and_replace" | "unknown";
   addNames: string[];
   removeNames: string[];
   newTaskText: string | null;
@@ -309,7 +309,7 @@ Known team members: ${options.teamMemberNames.join(", ")}
 
 Classify the user's intent and return JSON:
 {
-  "intent": "add_assignee" | "remove_assignee" | "reassign" | "add_task" | "cancel_task" | "unknown",
+  "intent": "add_assignee" | "remove_assignee" | "reassign" | "add_task" | "cancel_task" | "cancel_and_replace" | "unknown",
   "addNames": ["name"],
   "removeNames": ["name"],
   "newTaskText": "description" | null,
@@ -320,11 +320,15 @@ Intent rules:
 - add_assignee: adding someone new to the EXISTING task (e.g. "also assign to X", "add X")
 - remove_assignee: removing a specific PERSON from the task (e.g. "remove X", "unassign X")
 - reassign: replacing all assignees with new people (e.g. "only assign to X", "give this only to X", "remove X and assign to Y")
-- add_task: creating a brand-new separate task in this same thread (e.g. "add another task", "also ask them to")
-- cancel_task: cancelling/deleting/removing the whole task itself because it's wrong or no longer needed (e.g. "remove that task", "delete this task", "that task is wrong remove it", "cancel that", "the task description is incorrect please remove it")
+- add_task: creating a brand-new separate task in this same thread without cancelling existing (e.g. "add another task", "also ask them to do X")
+- cancel_task: cancelling/deleting the whole task, NO replacement (e.g. "remove that task", "delete this", "cancel that", "task is wrong remove it")
+- cancel_and_replace: cancel the current task AND immediately create a new one in its place. Use this when the person says something like "cancel this and add X", "remove that and the new task is X", "wrong task, the correct one is X", "replace with X", "change the task to X". Set newTaskText to the replacement task description.
 - unknown: can't determine intent
 
-For add_task: set newTaskText to the new task description. If the instruction implies existing people should also do it, set keepExistingAssignees to true; if specific new people are named, put them in addNames.
+IMPORTANT: If the message contains BOTH a cancellation/removal AND a new task description in the same sentence, always use cancel_and_replace — never split them or use cancel_task alone.
+
+For add_task and cancel_and_replace: set newTaskText to the exact task description from the message.
+If the instruction implies existing assignees should do the new task too, set keepExistingAssignees to true.
 Extract names from the known team member list that match names mentioned. Be fuzzy — "Makoy" matches "Makoy Mocha".`,
         },
         {

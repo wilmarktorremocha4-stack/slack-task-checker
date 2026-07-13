@@ -785,9 +785,72 @@ async function handleBotMentionInThread(
     await postThreadReply(
       channelId,
       threadTs,
-      `🗑️ Got it — I've cancelled and removed that task. No further follow-ups will be sent.\n\nIf you need to assign a new task, just @mention me here with the corrected details.`
+      `🗑️ Got it — task cancelled. No further follow-ups will be sent.\n\nIf you need to assign a new task, just @mention me here with the details.`
     );
     console.log("[thread-cmd] cancel_task — cancelled", existingIds.length, "task(s)");
+    return;
+  }
+
+  // ── CANCEL AND REPLACE ────────────────────────────────────────────────────
+  if (command.intent === "cancel_and_replace") {
+    const newText = command.newTaskText?.trim();
+    if (!newText) {
+      await postThreadReply(channelId, threadTs, "I cancelled the old task but couldn't figure out the new one. What should the new task be?");
+      // Cancel anyway
+      const existingIds = threadTasks.map((t) => t.id as string);
+      await supabase.from("tasks").update({ status: "cancelled", next_followup_at: null }).in("id", existingIds);
+      return;
+    }
+
+    // Cancel existing tasks
+    const existingIds = threadTasks.map((t) => t.id as string);
+    await supabase.from("tasks").update({ status: "cancelled", next_followup_at: null }).in("id", existingIds);
+
+    // Determine assignees: use named people if specified, otherwise reuse existing assignees
+    const namedAssignees = resolveMembers(command.addNames, mentionedIds);
+    const assignees: Array<{ id: string; name: string }> =
+      namedAssignees.length > 0
+        ? namedAssignees
+        : [
+            ...new Set(threadTasks.map((t) => t.assigned_to_id as string)),
+          ].map((id) => {
+            const t = threadTasks.find((x) => x.assigned_to_id === id)!;
+            return { id, name: t.assigned_to_name as string };
+          });
+
+    const inserts = assignees.map((member) => ({
+      task_text: newText,
+      raw_message: rawText,
+      assigned_to_id: member.id,
+      assigned_to_name: member.name,
+      assignee_ids: [member.id],
+      assignee_names: [member.name],
+      assigned_by_id: senderId,
+      assigned_by_name: senderName,
+      channel_id: channelId,
+      message_ts: event.ts as string,
+      thread_ts: threadTs,
+      status: "active",
+      followup_count: 0,
+      max_followups: 5,
+      next_followup_at: nextFollowupAt?.toISOString() ?? null,
+      assignee_timezone: process.env.TEAM_TIMEZONE ?? "UTC",
+    }));
+
+    await supabase.from("tasks").insert(inserts);
+
+    const taskMentions = assignees.map((m) => `<@${m.id}>`).join(", ");
+    const taskLines = newText.split(/\n|;/).map((l) => l.trim()).filter(Boolean);
+    const taskBody = taskLines.length > 1
+      ? taskLines.map((l) => `• ${l}`).join("\n")
+      : `• ${newText}`;
+
+    await postThreadReply(
+      channelId,
+      threadTs,
+      `✅ *Task updated*\n\n*Assigned to:* ${taskMentions}\n\n${taskBody}\n\n${taskMentions} — please reply *"done"* in this thread when complete. Use this thread for any questions.`
+    );
+    console.log("[thread-cmd] cancel_and_replace — new task:", newText.slice(0, 80), "for:", assignees.map((m) => m.name).join(", "));
     return;
   }
 }
