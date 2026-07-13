@@ -327,8 +327,13 @@ Intent rules:
 
 IMPORTANT: If the message contains BOTH a cancellation/removal AND a new task description in the same sentence, always use cancel_and_replace — never split them or use cancel_task alone.
 
+For keepExistingAssignees — set to TRUE when the message implies keeping the current assignees AND adding more people:
+  - "add also @Harry" → keepExistingAssignees: true, addNames: ["Harry"]  (keep Makoy + add Harry)
+  - "include @Harry too" → keepExistingAssignees: true, addNames: ["Harry"]
+  - "assign to @Harry as well" → keepExistingAssignees: true, addNames: ["Harry"]
+Set to FALSE when replacing: "only @Harry", "reassign to @Harry", "give it to @Harry instead".
+
 For add_task and cancel_and_replace: set newTaskText to the exact task description from the message.
-If the instruction implies existing assignees should do the new task too, set keepExistingAssignees to true.
 Extract names from the known team member list that match names mentioned. Be fuzzy — "Makoy" matches "Makoy Mocha".`,
         },
         {

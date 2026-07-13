@@ -806,17 +806,27 @@ async function handleBotMentionInThread(
     const existingIds = threadTasks.map((t) => t.id as string);
     await supabase.from("tasks").update({ status: "cancelled", next_followup_at: null }).in("id", existingIds);
 
-    // Determine assignees: use named people if specified, otherwise reuse existing assignees
+    // Determine assignees, honouring thread history:
+    // - keepExistingAssignees=true ("add also @Harry") → keep Makoy + add Harry
+    // - explicit new names only ("replace with @Harry") → only Harry
+    // - no names mentioned → keep existing unchanged
     const namedAssignees = resolveMembers(command.addNames, mentionedIds);
-    const assignees: Array<{ id: string; name: string }> =
-      namedAssignees.length > 0
-        ? namedAssignees
-        : [
-            ...new Set(threadTasks.map((t) => t.assigned_to_id as string)),
-          ].map((id) => {
-            const t = threadTasks.find((x) => x.assigned_to_id === id)!;
-            return { id, name: t.assigned_to_name as string };
-          });
+    const existingAssignees = [...new Set(threadTasks.map((t) => t.assigned_to_id as string))].map((id) => {
+      const t = threadTasks.find((x) => x.assigned_to_id === id)!;
+      return { id, name: t.assigned_to_name as string };
+    });
+
+    let assignees: Array<{ id: string; name: string }>;
+    if (command.keepExistingAssignees) {
+      assignees = [...existingAssignees];
+      for (const m of namedAssignees) {
+        if (!assignees.find((a) => a.id === m.id)) assignees.push(m);
+      }
+    } else if (namedAssignees.length > 0) {
+      assignees = namedAssignees;
+    } else {
+      assignees = existingAssignees;
+    }
 
     const inserts = assignees.map((member) => ({
       task_text: newText,
