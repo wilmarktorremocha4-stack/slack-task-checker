@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <!-- Background -->
+  <rect width="200" height="200" rx="40" fill="#1A1A2E"/>
+
+  <!-- Antenna -->
+  <rect x="97" y="18" width="6" height="22" rx="3" fill="#7C83FD"/>
+  <circle cx="100" cy="14" r="7" fill="#7C83FD"/>
+
+  <!-- Head -->
+  <rect x="42" y="40" width="116" height="80" rx="18" fill="#2D2D5E"/>
+  <rect x="44" y="42" width="112" height="76" rx="16" fill="#3A3A7C"/>
+
+  <!-- Eyes -->
+  <!-- Left eye -->
+  <rect x="56" y="60" width="34" height="26" rx="8" fill="#1A1A2E"/>
+  <rect x="58" y="62" width="30" height="22" rx="6" fill="#7C83FD" opacity="0.2"/>
+  <circle cx="73" cy="73" r="9" fill="#7C83FD"/>
+  <circle cx="73" cy="73" r="5" fill="#B8BBFF"/>
+  <circle cx="76" cy="70" r="2" fill="white" opacity="0.8"/>
+
+  <!-- Right eye -->
+  <rect x="110" y="60" width="34" height="26" rx="8" fill="#1A1A2E"/>
+  <rect x="112" y="62" width="30" height="22" rx="6" fill="#7C83FD" opacity="0.2"/>
+  <circle cx="127" cy="73" r="9" fill="#7C83FD"/>
+  <circle cx="127" cy="73" r="5" fill="#B8BBFF"/>
+  <circle cx="130" cy="70" r="2" fill="white" opacity="0.8"/>
+
+  <!-- Mouth / status bar -->
+  <rect x="62" y="98" width="76" height="12" rx="6" fill="#1A1A2E"/>
+  <rect x="64" y="100" width="48" height="8" rx="4" fill="#7C83FD"/>
+
+  <!-- Ears / side bolts -->
+  <rect x="34" y="62" width="10" height="20" rx="5" fill="#2D2D5E"/>
+  <rect x="156" y="62" width="10" height="20" rx="5" fill="#2D2D5E"/>
+
+  <!-- Body -->
+  <rect x="52" y="128" width="96" height="54" rx="14" fill="#2D2D5E"/>
+  <rect x="54" y="130" width="92" height="50" rx="12" fill="#3A3A7C"/>
+
+  <!-- Chest panel -->
+  <rect x="66" y="140" width="28" height="18" rx="5" fill="#1A1A2E"/>
+  <circle cx="80" cy="149" r="5" fill="#7C83FD"/>
+  <circle cx="80" cy="149" r="2.5" fill="#B8BBFF"/>
+
+  <!-- Chest dots -->
+  <circle cx="118" cy="143" r="4" fill="#7C83FD" opacity="0.7"/>
+  <circle cx="130" cy="143" r="4" fill="#7C83FD" opacity="0.4"/>
+  <circle cx="118" cy="155" r="4" fill="#7C83FD" opacity="0.4"/>
+  <circle cx="130" cy="155" r="4" fill="#7C83FD" opacity="0.7"/>
+
+  <!-- Arms -->
+  <rect x="22" y="130" width="32" height="42" rx="12" fill="#2D2D5E"/>
+  <rect x="24" y="132" width="28" height="38" rx="10" fill="#3A3A7C"/>
+  <rect x="146" y="130" width="32" height="42" rx="12" fill="#2D2D5E"/>
+  <rect x="148" y="132" width="28" height="38" rx="10" fill="#3A3A7C"/>
+
+  <!-- Neck connector -->
+  <rect x="84" y="120" width="32" height="12" rx="4" fill="#2D2D5E"/>
+</svg>
