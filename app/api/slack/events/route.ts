@@ -449,7 +449,7 @@ async function handleVoiceMessage(
     await postThreadReply(
       channelId,
       threadTs,
-      "⚠️ Failed to download the audio file. Please try sending it again."
+      "⚠️ Failed to download the audio file. Make sure the bot has the `files:read` Slack permission (OAuth & Permissions → reinstall app after adding the scope)."
     );
     return;
   }

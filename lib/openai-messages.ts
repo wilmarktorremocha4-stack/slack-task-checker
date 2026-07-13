@@ -115,15 +115,19 @@ export async function transcribeAudio(
   try {
     const openai = getOpenAIClient();
 
-    const file = new File([audioBuffer.buffer as ArrayBuffer], fileName, {
-      type: fileName.endsWith(".webm")
-        ? "audio/webm"
-        : fileName.endsWith(".mp4")
-        ? "audio/mp4"
-        : fileName.endsWith(".ogg")
-        ? "audio/ogg"
-        : "audio/mpeg",
-    });
+    // Use Uint8Array so the File gets exactly the right bytes —
+    // Buffer.buffer is a pooled ArrayBuffer that may be larger than the actual data.
+    const mimeType = fileName.endsWith(".webm")
+      ? "audio/webm"
+      : fileName.endsWith(".mp4") || fileName.endsWith(".m4a")
+      ? "audio/mp4"
+      : fileName.endsWith(".ogg")
+      ? "audio/ogg"
+      : "audio/mpeg";
+
+    const file = new File([new Uint8Array(audioBuffer)], fileName, { type: mimeType });
+
+    console.log("[whisper] sending file:", fileName, "size:", file.size, "type:", mimeType);
 
     const transcription = await openai.audio.transcriptions.create({
       file,

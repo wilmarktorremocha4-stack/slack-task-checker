@@ -147,14 +147,17 @@ export async function downloadSlackFile(
       },
     });
     if (!response.ok) {
-      console.error(
-        "[slack] file download failed:",
-        response.status,
-        response.statusText
-      );
+      console.error("[slack] file download failed:", response.status, response.statusText);
+      return null;
+    }
+    // If Slack returns HTML it means the bot lacks files:read scope
+    const contentType = response.headers.get("content-type") ?? "";
+    if (contentType.startsWith("text/html")) {
+      console.error("[slack] file download returned HTML — bot is missing files:read scope");
       return null;
     }
     const arrayBuffer = await response.arrayBuffer();
+    console.log("[slack] downloaded file bytes:", arrayBuffer.byteLength, "content-type:", contentType);
     return Buffer.from(arrayBuffer);
   } catch (err) {
     console.error("[slack] downloadSlackFile failed:", err);
