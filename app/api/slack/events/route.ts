@@ -104,10 +104,11 @@ async function processSlackEvent(event: Record<string, unknown>) {
     return;
   }
 
-  // Ignore all other message subtypes: edits (message_changed),
-  // thread_broadcast, file_share replies, slackbot_response, etc.
-  // Only process clean, original human messages.
-  if (event.subtype) {
+  // Allow file_share through — Slack sends voice notes and file uploads with
+  // this subtype. We handle audio files below; non-audio file_share is ignored there.
+  // All other subtypes (message_changed, thread_broadcast, slackbot_response, etc.)
+  // are dropped here.
+  if (event.subtype && event.subtype !== "file_share") {
     console.log("[slack] ignoring subtype:", event.subtype);
     return;
   }
