@@ -192,7 +192,7 @@ async function handleNewTaskMention(
     await postThreadReply(
       channelId,
       threadTs,
-      "Hey! To assign a task, mention me and tag the person: `@TaskBot @teammate task description here`"
+      "Hey! To assign a task, mention me and tag the person: `@Task Bot @teammate task description here`"
     );
     return;
   }
@@ -229,7 +229,7 @@ async function handleNewTaskMention(
     await postThreadReply(
       channelId,
       threadTs,
-      `Got it ${assignerName}! But I couldn't identify a clear task. Try: \`@TaskBot @${primaryAssignee.name} needs to [specific task description]\``
+      `Got it ${assignerName}! But I couldn't identify a clear task. Try: \`@Task Bot @${primaryAssignee.name} needs to [specific task description]\``
     );
     return;
   }
