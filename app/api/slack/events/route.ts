@@ -161,6 +161,18 @@ async function processSlackEvent(event: Record<string, unknown>) {
   // Everything else (top-level channel messages, reactions, etc.) — ignore silently
 }
 
+// Format task text for Slack messages.
+// Single task  → "*Task:* Buy yellow paper"
+// Multi-line   → "*Task 1:* Buy yellow paper\n*Task 2:* Cook adobo"
+function formatTaskBody(text: string): string {
+  const lines = text
+    .split(/\n|;/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+  if (lines.length <= 1) return `*Task:* ${text.trim()}`;
+  return lines.map((l, i) => `*Task ${i + 1}:* ${l}`).join("\n");
+}
+
 async function handleNewTaskMention(
   event: Record<string, unknown>,
   supabase: ReturnType<typeof createSupabaseAdmin>,
@@ -269,21 +281,11 @@ async function handleNewTaskMention(
 
   const allMentions = assignees.map(a => `<@${a.id}>`).join(", ");
 
-  // Bullet task lines if multiple
-  const taskLines = parsed.taskText
-    .split(/\n|;/)
-    .map((l: string) => l.trim())
-    .filter(Boolean);
-  const taskBody =
-    taskLines.length > 1
-      ? taskLines.map((l: string) => `• ${l}`).join("\n")
-      : `• ${parsed.taskText}`;
-
   await postThreadReply(
     channelId,
     threadTs,
     `✅ *Task assigned*\n\n*Assigned to:* ${allMentions}\n\n` +
-      taskBody +
+      formatTaskBody(parsed.taskText) +
       `\n\n${allMentions} — please reply *"done"* in this thread when the task is complete. Use this thread for any questions.`
   );
 
@@ -368,8 +370,9 @@ async function handleThreadReply(
       await postThreadReply(
         pendingVoice.channel_id,
         pendingVoice.thread_ts,
-        `✅ *Task assigned*\n\n*Assigned to:* ${assigneeMentions}\n\n• ${pendingVoice.task_text}\n\n` +
-          `${assigneeMentions} — please reply *"done"* in this thread when the task is complete. Use this thread for any questions.`
+        `✅ *Task assigned*\n\n*Assigned to:* ${assigneeMentions}\n\n` +
+          formatTaskBody(pendingVoice.task_text) +
+          `\n\n${assigneeMentions} — please reply *"done"* in this thread when the task is complete. Use this thread for any questions.`
       );
 
       console.log("[voice] pending task resolved, assigned to:", matchedMembers.map(m => m.name).join(", "));
@@ -763,16 +766,11 @@ async function handleBotMentionInThread(
     await supabase.from("tasks").insert(inserts);
 
     const taskMentions = assignees.map((m) => `<@${m.id}>`).join(", ");
-    // Bullet the new task lines
-    const taskLines = newText.split(/\n|;/).map((l) => l.trim()).filter(Boolean);
-    const taskBody = taskLines.length > 1
-      ? taskLines.map((l) => `• ${l}`).join("\n")
-      : `• ${newText}`;
 
     await postThreadReply(
       channelId,
       threadTs,
-      `✅ *New task added*\n\n*Assigned to:* ${taskMentions}\n\n${taskBody}\n\n${taskMentions} — please reply *"done"* in this thread when complete. Use this thread for any questions.`
+      `✅ *New task added*\n\n*Assigned to:* ${taskMentions}\n\n${formatTaskBody(newText)}\n\n${taskMentions} — please reply *"done"* in this thread when complete. Use this thread for any questions.`
     );
     console.log("[thread-cmd] add_task for:", assignees.map((m) => m.name).join(", "), "task:", newText.slice(0, 80));
     return;
@@ -850,15 +848,11 @@ async function handleBotMentionInThread(
     await supabase.from("tasks").insert(inserts);
 
     const taskMentions = assignees.map((m) => `<@${m.id}>`).join(", ");
-    const taskLines = newText.split(/\n|;/).map((l) => l.trim()).filter(Boolean);
-    const taskBody = taskLines.length > 1
-      ? taskLines.map((l) => `• ${l}`).join("\n")
-      : `• ${newText}`;
 
     await postThreadReply(
       channelId,
       threadTs,
-      `✅ *Task updated*\n\n*Assigned to:* ${taskMentions}\n\n${taskBody}\n\n${taskMentions} — please reply *"done"* in this thread when complete. Use this thread for any questions.`
+      `✅ *Task updated*\n\n*Assigned to:* ${taskMentions}\n\n${formatTaskBody(newText)}\n\n${taskMentions} — please reply *"done"* in this thread when complete. Use this thread for any questions.`
     );
     console.log("[thread-cmd] cancel_and_replace — new task:", newText.slice(0, 80), "for:", assignees.map((m) => m.name).join(", "));
     return;
@@ -1028,22 +1022,12 @@ async function handleVoiceMessage(
 
   const assigneeMentions = matchedMembers.map(m => `<@${m.id}>`).join(", ");
 
-  // Bullet the task lines if there are multiple (split on newlines or semicolons)
-  const taskLines = parsed.taskText
-    .split(/\n|;/)
-    .map(l => l.trim())
-    .filter(Boolean);
-  const taskBody =
-    taskLines.length > 1
-      ? taskLines.map(l => `• ${l}`).join("\n")
-      : `• ${parsed.taskText}`;
-
   await postThreadReply(
     channelId,
     threadTs,
     `✅ *Task assigned from voice note*\n\n` +
       `*Assigned to:* ${assigneeMentions}\n\n` +
-      taskBody +
+      formatTaskBody(parsed.taskText) +
       `\n\n${assigneeMentions} — please reply *"done"* in this thread when the task is complete. Use this thread for any questions.`
   );
 
