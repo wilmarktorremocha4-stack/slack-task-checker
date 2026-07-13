@@ -94,7 +94,17 @@ async function processSlackEvent(event: Record<string, unknown>) {
     return;
   }
 
-  // Ignore message subtypes: edits (message_changed), deletions (message_deleted),
+  // Handle message deletions: cancel any task tied to the deleted message.
+  // Do this BEFORE the generic subtype guard since message_deleted is a subtype.
+  if (event.subtype === "message_deleted") {
+    const deletedTs = (event.deleted_ts as string) ?? (event.previous_message as Record<string, unknown>)?.ts as string;
+    if (deletedTs) {
+      await handleMessageDeleted(deletedTs, supabase);
+    }
+    return;
+  }
+
+  // Ignore all other message subtypes: edits (message_changed),
   // thread_broadcast, file_share replies, slackbot_response, etc.
   // Only process clean, original human messages.
   if (event.subtype) {
@@ -171,6 +181,33 @@ function formatTaskBody(text: string): string {
     .filter(Boolean);
   if (lines.length <= 1) return `*Task:* ${text.trim()}`;
   return lines.map((l, i) => `*Task ${i + 1}:* ${l}`).join("\n");
+}
+
+async function handleMessageDeleted(
+  deletedTs: string,
+  supabase: ReturnType<typeof createSupabaseAdmin>
+) {
+  // Find active tasks whose root message matches the deleted timestamp.
+  // message_ts is the ts of the original task-assignment message.
+  const { data: tasks } = await supabase
+    .from("tasks")
+    .select("id, status")
+    .eq("message_ts", deletedTs)
+    .in("status", ["active", "revision_requested"]);
+
+  if (!tasks || tasks.length === 0) {
+    console.log("[delete] no active tasks found for ts:", deletedTs);
+    return;
+  }
+
+  const ids = tasks.map((t) => t.id as string);
+  await supabase
+    .from("tasks")
+    .update({ status: "cancelled", next_followup_at: null })
+    .in("id", ids);
+
+  console.log("[delete] cancelled", ids.length, "task(s) for deleted message ts:", deletedTs);
+  // No reply — the thread is gone.
 }
 
 async function handleNewTaskMention(
