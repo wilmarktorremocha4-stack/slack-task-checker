@@ -200,6 +200,67 @@ If no task is found, set hasTask to false and all other fields to empty/false.`,
   }
 }
 
+export async function parseThreadCommand(options: {
+  messageText: string;
+  existingTaskText: string;
+  existingAssigneeNames: string[];
+  teamMemberNames: string[];
+}): Promise<{
+  intent: "add_assignee" | "remove_assignee" | "reassign" | "add_task" | "unknown";
+  addNames: string[];
+  removeNames: string[];
+  newTaskText: string | null;
+  keepExistingAssignees: boolean;
+} | null> {
+  try {
+    const openai = getOpenAIClient();
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        {
+          role: "system",
+          content: `You manage tasks in a Slack workspace. A user has @mentioned the task bot inside an existing task thread to give a command.
+
+Current task: "${options.existingTaskText}"
+Current assignees: ${options.existingAssigneeNames.join(", ")}
+Known team members: ${options.teamMemberNames.join(", ")}
+
+Classify the user's intent and return JSON:
+{
+  "intent": "add_assignee" | "remove_assignee" | "reassign" | "add_task" | "unknown",
+  "addNames": ["name"],
+  "removeNames": ["name"],
+  "newTaskText": "description" | null,
+  "keepExistingAssignees": boolean
+}
+
+Intent rules:
+- add_assignee: adding someone new to the EXISTING task (e.g. "also assign to X", "add X")
+- remove_assignee: removing someone from the existing task (e.g. "remove X", "unassign X")
+- reassign: replacing all assignees with new people (e.g. "only assign to X", "give this only to X", "remove X and assign to Y")
+- add_task: creating a brand-new separate task in this same thread (e.g. "add another task", "also ask them to")
+- unknown: can't determine intent
+
+For add_task: set newTaskText to the new task description. If the instruction implies existing people should also do it, set keepExistingAssignees to true; if specific new people are named, put them in addNames.
+Extract names from the known team member list that match names mentioned. Be fuzzy — "Makoy" matches "Makoy Mocha".`,
+        },
+        {
+          role: "user",
+          content: options.messageText,
+        },
+      ],
+      max_tokens: 300,
+      temperature: 0,
+      response_format: { type: "json_object" },
+    });
+
+    return JSON.parse(response.choices[0]?.message?.content ?? "{}");
+  } catch (err) {
+    console.error("[openai] parseThreadCommand failed:", err);
+    return null;
+  }
+}
+
 export async function generateEscalationMessage(options: {
   taskText: string;
   assigneeName: string;
