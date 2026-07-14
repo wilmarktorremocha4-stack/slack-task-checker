@@ -1082,35 +1082,41 @@ async function handleBotMentionInThread(
       await supabase.from("tasks").update({ status: "cancelled", next_followup_at: null }).in("id", tasksToCancel.map((t) => t.id as string));
     }
 
-    // Only create new tasks for people NOT already assigned
+    // Only create new tasks for people NOT already assigned.
+    // Preserve ALL unique task texts — one row per (task text × new member).
     const newMembers = toAdd.filter((m) => !alreadyAssignedIds.has(m.id));
     if (newMembers.length > 0) {
-      const inserts = newMembers.map((member) => ({
-        task_text: existingTaskText,
-        raw_message: rawText,
-        assigned_to_id: member.id,
-        assigned_to_name: member.name,
-        assignee_ids: [member.id],
-        assignee_names: [member.name],
-        assigned_by_id: senderId,
-        assigned_by_name: senderName,
-        channel_id: channelId,
-        message_ts: event.ts as string,
-        thread_ts: threadTs,
-        status: "active",
-        followup_count: 0,
-        max_followups: 5,
-        next_followup_at: nextFollowupAt?.toISOString() ?? null,
-        assignee_timezone: process.env.TEAM_TIMEZONE ?? "UTC",
-      }));
+      const uniqueTaskTexts = [...new Set(activeThreadTasks.map((t) => t.task_text as string))];
+      const inserts = newMembers.flatMap((member) =>
+        uniqueTaskTexts.map((taskText) => ({
+          task_text: taskText,
+          raw_message: rawText,
+          assigned_to_id: member.id,
+          assigned_to_name: member.name,
+          assignee_ids: [member.id],
+          assignee_names: [member.name],
+          assigned_by_id: senderId,
+          assigned_by_name: senderName,
+          channel_id: channelId,
+          message_ts: event.ts as string,
+          thread_ts: threadTs,
+          status: "active",
+          followup_count: 0,
+          max_followups: 5,
+          next_followup_at: nextFollowupAt?.toISOString() ?? null,
+          assignee_timezone: process.env.TEAM_TIMEZONE ?? "UTC",
+        }))
+      );
       await supabase.from("tasks").insert(inserts);
     }
 
     const newMentions = toAdd.map((m) => `<@${m.id}>`).join(", ");
+    const reassignedTaskCount = [...new Set(activeThreadTasks.map((t) => t.task_text as string))].length;
+    const taskWord = reassignedTaskCount === 1 ? "task" : `${reassignedTaskCount} tasks`;
     await postThreadReply(
       channelId,
       threadTs,
-      `✅ Reassigned to ${newMentions}.\n\n${newMentions} — please reply *"done"* in this thread when complete. Use this thread for any questions.`
+      `✅ Reassigned ${taskWord} to ${newMentions}.\n\n${newMentions} — please reply *"done"* in this thread when each task is complete. Use this thread for any questions.`
     );
     console.log("[thread-cmd] reassign to:", toAdd.map((m) => m.name).join(", "));
     return;
@@ -1553,32 +1559,40 @@ async function handleVoiceThreadCommand(
       await supabase.from("tasks").update({ status: "cancelled", next_followup_at: null }).in("id", tasksToCancel.map((t) => t.id as string));
     }
 
-    // Only create new tasks for people NOT already assigned
+    // Only create new tasks for people NOT already assigned.
+    // Preserve ALL unique task texts — one row per (task text × new member).
     const newMembers = toAdd.filter((m) => !alreadyAssignedIds.has(m.id));
     if (newMembers.length > 0) {
-      await supabase.from("tasks").insert(newMembers.map((member) => ({
-        task_text: existingTaskText,
-        raw_message: transcription,
-        voice_transcription: transcription,
-        assigned_to_id: member.id,
-        assigned_to_name: member.name,
-        assignee_ids: [member.id],
-        assignee_names: [member.name],
-        assigned_by_id: senderId,
-        assigned_by_name: senderName,
-        channel_id: channelId,
-        message_ts: event.ts as string,
-        thread_ts: threadTs,
-        status: "active",
-        followup_count: 0,
-        max_followups: 5,
-        next_followup_at: nextFollowupAt?.toISOString() ?? null,
-        assignee_timezone: process.env.TEAM_TIMEZONE ?? "UTC",
-      })));
+      const uniqueTaskTexts = [...new Set(activeThreadTasks.map((t) => t.task_text as string))];
+      await supabase.from("tasks").insert(
+        newMembers.flatMap((member) =>
+          uniqueTaskTexts.map((taskText) => ({
+            task_text: taskText,
+            raw_message: transcription,
+            voice_transcription: transcription,
+            assigned_to_id: member.id,
+            assigned_to_name: member.name,
+            assignee_ids: [member.id],
+            assignee_names: [member.name],
+            assigned_by_id: senderId,
+            assigned_by_name: senderName,
+            channel_id: channelId,
+            message_ts: event.ts as string,
+            thread_ts: threadTs,
+            status: "active",
+            followup_count: 0,
+            max_followups: 5,
+            next_followup_at: nextFollowupAt?.toISOString() ?? null,
+            assignee_timezone: process.env.TEAM_TIMEZONE ?? "UTC",
+          }))
+        )
+      );
     }
 
     const newMentions = toAdd.map((m) => `<@${m.id}>`).join(", ");
-    await postThreadReply(channelId, threadTs, `✅ Reassigned to ${newMentions}.\n\n${newMentions} — please reply *"done"* in this thread when complete.`);
+    const voiceReassignCount = [...new Set(activeThreadTasks.map((t) => t.task_text as string))].length;
+    const voiceTaskWord = voiceReassignCount === 1 ? "task" : `${voiceReassignCount} tasks`;
+    await postThreadReply(channelId, threadTs, `✅ Reassigned ${voiceTaskWord} to ${newMentions}.\n\n${newMentions} — please reply *"done"* in this thread when each task is complete.`);
     return;
   }
 
