@@ -646,25 +646,33 @@ async function handleBotMentionInThread(
   const senderId = event.user as string;
   const botUserId = await getBotUserId();
 
-  // Fetch all active tasks in this thread
+  // Fetch ALL tasks in this thread (any status) to detect if this is a task thread.
+  // We include cancelled/completed so that a thread where tasks were previously
+  // cancelled still routes to thread-command mode instead of new-task mode.
   const { data: threadTasks } = await supabase
     .from("tasks")
     .select("*")
     .eq("thread_ts", threadTs)
-    .not("status", "in", '("cancelled","escalated")')
     .order("created_at", { ascending: true });
 
-  // No existing tasks in thread — fall through to new task creation
+  // No tasks at all in this thread — fall through to new task creation
   if (!threadTasks || threadTasks.length === 0) {
     console.log("[thread-cmd] no existing tasks, delegating to new task handler");
     await handleNewTaskMention(event, supabase, brandonUserId);
     return;
   }
 
+  // Active tasks for command context (reassign, add, etc.)
+  const activeThreadTasks = threadTasks.filter(
+    (t) => t.status !== "cancelled" && t.status !== "escalated"
+  );
+
   const teamMembers = await getWorkspaceMembers();
-  const existingTaskText = threadTasks[0].task_text as string;
+  // Use active tasks for context; fall back to most recent task if all are cancelled
+  const contextTasks = activeThreadTasks.length > 0 ? activeThreadTasks : threadTasks;
+  const existingTaskText = contextTasks[contextTasks.length - 1].task_text as string;
   const existingAssigneeNames: string[] = [
-    ...new Set(threadTasks.flatMap((t) => (t.assignee_names?.length ? t.assignee_names : [t.assigned_to_name]) as string[])),
+    ...new Set(contextTasks.flatMap((t) => (t.assignee_names?.length ? t.assignee_names : [t.assigned_to_name]) as string[])),
   ];
 
   const botEnvId = process.env.SLACK_BOT_USER_ID ?? "";
@@ -790,7 +798,7 @@ async function handleBotMentionInThread(
     }
 
     // Only add people not already assigned
-    const alreadyIds = new Set(threadTasks.map((t) => t.assigned_to_id as string));
+    const alreadyIds = new Set(activeThreadTasks.map((t) => t.assigned_to_id as string));
     const newMembers = toAdd.filter((m) => !alreadyIds.has(m.id));
 
     if (newMembers.length === 0) {
@@ -862,11 +870,11 @@ async function handleBotMentionInThread(
       return;
     }
 
-    const alreadyAssignedIds = new Set(threadTasks.map((t) => t.assigned_to_id as string));
+    const alreadyAssignedIds = new Set(activeThreadTasks.map((t) => t.assigned_to_id as string));
     const toAddIds = new Set(toAdd.map((m) => m.id));
 
     // Cancel tasks for people NOT in the new assignee list
-    const tasksToCancel = threadTasks.filter((t) => !toAddIds.has(t.assigned_to_id as string));
+    const tasksToCancel = activeThreadTasks.filter((t) => !toAddIds.has(t.assigned_to_id as string));
     if (tasksToCancel.length > 0) {
       await supabase.from("tasks").update({ status: "cancelled", next_followup_at: null }).in("id", tasksToCancel.map((t) => t.id as string));
     }
@@ -919,10 +927,10 @@ async function handleBotMentionInThread(
       // Same people as current thread
       assignees = [
         ...new Set(
-          threadTasks.map((t) => t.assigned_to_id as string)
+          activeThreadTasks.map((t) => t.assigned_to_id as string)
         ),
       ].map((id) => {
-        const t = threadTasks.find((x) => x.assigned_to_id === id)!;
+        const t = activeThreadTasks.find((x) => x.assigned_to_id === id)!;
         return { id, name: t.assigned_to_name as string };
       });
     }
@@ -934,8 +942,8 @@ async function handleBotMentionInThread(
 
     if (assignees.length === 0) {
       // Default to current thread assignees rather than asking
-      assignees = [...new Set(threadTasks.map((t) => t.assigned_to_id as string))].map((id) => {
-        const t = threadTasks.find((x) => x.assigned_to_id === id)!;
+      assignees = [...new Set(activeThreadTasks.map((t) => t.assigned_to_id as string))].map((id) => {
+        const t = activeThreadTasks.find((x) => x.assigned_to_id === id)!;
         return { id, name: t.assigned_to_name as string };
       });
     }
@@ -976,9 +984,43 @@ async function handleBotMentionInThread(
     return;
   }
 
+  // ── REOPEN TASK ───────────────────────────────────────────────────────────
+  if (command.intent === "reopen_task") {
+    const { data: closedTasks } = await supabase
+      .from("tasks")
+      .select("*")
+      .eq("thread_ts", threadTs)
+      .in("status", ["cancelled", "completed"])
+      .order("created_at", { ascending: false });
+
+    if (!closedTasks || closedTasks.length === 0) {
+      await postThreadReply(channelId, threadTs, "There are no completed or cancelled tasks in this thread to reopen.");
+      return;
+    }
+
+    const nextFollowupAt2 = calculateNextFollowupAt(0, new Date(), process.env.TEAM_TIMEZONE ?? "UTC");
+    const idsToReopen = [...new Set(closedTasks.map((t) => t.id as string))];
+    await supabase.from("tasks").update({
+      status: "active",
+      completed_at: null,
+      next_followup_at: nextFollowupAt2?.toISOString() ?? null,
+      followup_count: 0,
+    }).in("id", idsToReopen);
+
+    const assigneeMentions = [...new Set(closedTasks.map((t) => t.assigned_to_id as string))]
+      .map((id) => `<@${id}>`).join(", ");
+    await postThreadReply(
+      channelId,
+      threadTs,
+      `🔁 Task reopened and follow-ups restarted.\n\n*Assigned to:* ${assigneeMentions}\n\n${formatTaskBody(closedTasks[0].task_text as string)}\n\n${assigneeMentions} — please reply *"done"* when complete.`
+    );
+    console.log("[thread-cmd] reopen_task — reopened", idsToReopen.length, "task(s)");
+    return;
+  }
+
   // ── CANCEL TASK ───────────────────────────────────────────────────────────
   if (command.intent === "cancel_task") {
-    const existingIds = threadTasks.map((t) => t.id as string);
+    const existingIds = activeThreadTasks.map((t) => t.id as string);
     await supabase.from("tasks").update({ status: "cancelled", next_followup_at: null }).in("id", existingIds);
     await postThreadReply(
       channelId,
@@ -1091,6 +1133,58 @@ async function handleVoiceThreadCommand(
 
   console.log("[voice-thread] transcription:", transcription.slice(0, 200));
 
+  // ── Check if Brandon is answering the "who should do this?" question via voice ──
+  const { data: pendingVoice } = await supabase
+    .from("pending_voice_tasks")
+    .select("*")
+    .eq("thread_ts", threadTs)
+    .eq("resolved", false)
+    .maybeSingle();
+
+  if (pendingVoice && senderId === process.env.SLACK_BRANDON_USER_ID) {
+    const teamMembers2 = await getWorkspaceMembers();
+    const botUserId2 = await getBotUserId();
+    const botEnvId2 = process.env.SLACK_BOT_USER_ID ?? "";
+
+    // Try to find a team member name in the transcription
+    const matched = teamMembers2.filter((m) => {
+      const firstName = m.name.split(" ")[0].toLowerCase();
+      return (
+        transcription.toLowerCase().includes(m.name.toLowerCase()) ||
+        transcription.toLowerCase().includes(firstName)
+      );
+    }).filter((m) => m.id !== botUserId2 && m.id !== botEnvId2);
+
+    if (matched.length > 0) {
+      const nextFollowupAt2 = calculateNextFollowupAt(0, new Date(), process.env.TEAM_TIMEZONE ?? "UTC");
+      await supabase.from("tasks").insert(matched.map((member) => ({
+        task_text: pendingVoice.task_text,
+        raw_message: pendingVoice.transcription,
+        voice_transcription: pendingVoice.transcription,
+        assigned_to_id: member.id,
+        assigned_to_name: member.name,
+        assignee_ids: [member.id],
+        assignee_names: [member.name],
+        assigned_by_id: pendingVoice.created_by_id,
+        assigned_by_name: pendingVoice.created_by_name,
+        channel_id: pendingVoice.channel_id,
+        message_ts: pendingVoice.message_ts,
+        thread_ts: pendingVoice.thread_ts,
+        status: "active",
+        followup_count: 0,
+        max_followups: 5,
+        next_followup_at: nextFollowupAt2?.toISOString() ?? null,
+        assignee_timezone: process.env.TEAM_TIMEZONE ?? "UTC",
+      })));
+      await supabase.from("pending_voice_tasks").update({ resolved: true }).eq("id", pendingVoice.id);
+      const mentions = matched.map((m) => `<@${m.id}>`).join(", ");
+      await postThreadReply(pendingVoice.channel_id, pendingVoice.thread_ts,
+        `✅ *Task assigned*\n\n*Assigned to:* ${mentions}\n\n${formatTaskBody(pendingVoice.task_text)}\n\n${mentions} — please reply *"done"* in this thread when the task is complete.`
+      );
+      return;
+    }
+  }
+
   // ── Load thread context ───────────────────────────────────────────────────
   const { data: threadTasks } = await supabase
     .from("tasks")
@@ -1147,7 +1241,8 @@ async function handleVoiceThreadCommand(
       );
       if (m && !result.find((r) => r.id === m.id)) result.push(m);
     }
-    return result;
+    // Never assign to the bot itself
+    return result.filter((m) => m.id !== botUserId && m.id !== botEnvId);
   }
 
   // ── ADD ASSIGNEE ──────────────────────────────────────────────────────────
@@ -1210,26 +1305,40 @@ async function handleVoiceThreadCommand(
       await postThreadReply(channelId, threadTs, "I couldn't figure out who to reassign to from the voice note. Please @mention them in a text reply.");
       return;
     }
-    await supabase.from("tasks").update({ status: "cancelled" }).in("id", threadTasks.map((t) => t.id as string));
-    await supabase.from("tasks").insert(toAdd.map((member) => ({
-      task_text: existingTaskText,
-      raw_message: transcription,
-      voice_transcription: transcription,
-      assigned_to_id: member.id,
-      assigned_to_name: member.name,
-      assignee_ids: [member.id],
-      assignee_names: [member.name],
-      assigned_by_id: senderId,
-      assigned_by_name: senderName,
-      channel_id: channelId,
-      message_ts: event.ts as string,
-      thread_ts: threadTs,
-      status: "active",
-      followup_count: 0,
-      max_followups: 5,
-      next_followup_at: nextFollowupAt?.toISOString() ?? null,
-      assignee_timezone: process.env.TEAM_TIMEZONE ?? "UTC",
-    })));
+
+    const alreadyAssignedIds = new Set(threadTasks.map((t) => t.assigned_to_id as string));
+    const toAddIds = new Set(toAdd.map((m) => m.id));
+
+    // Cancel tasks for people NOT in the new assignee list
+    const tasksToCancel = threadTasks.filter((t) => !toAddIds.has(t.assigned_to_id as string));
+    if (tasksToCancel.length > 0) {
+      await supabase.from("tasks").update({ status: "cancelled", next_followup_at: null }).in("id", tasksToCancel.map((t) => t.id as string));
+    }
+
+    // Only create new tasks for people NOT already assigned
+    const newMembers = toAdd.filter((m) => !alreadyAssignedIds.has(m.id));
+    if (newMembers.length > 0) {
+      await supabase.from("tasks").insert(newMembers.map((member) => ({
+        task_text: existingTaskText,
+        raw_message: transcription,
+        voice_transcription: transcription,
+        assigned_to_id: member.id,
+        assigned_to_name: member.name,
+        assignee_ids: [member.id],
+        assignee_names: [member.name],
+        assigned_by_id: senderId,
+        assigned_by_name: senderName,
+        channel_id: channelId,
+        message_ts: event.ts as string,
+        thread_ts: threadTs,
+        status: "active",
+        followup_count: 0,
+        max_followups: 5,
+        next_followup_at: nextFollowupAt?.toISOString() ?? null,
+        assignee_timezone: process.env.TEAM_TIMEZONE ?? "UTC",
+      })));
+    }
+
     const newMentions = toAdd.map((m) => `<@${m.id}>`).join(", ");
     await postThreadReply(channelId, threadTs, `✅ Reassigned to ${newMentions}.\n\n${newMentions} — please reply *"done"* in this thread when complete.`);
     return;
@@ -1251,6 +1360,13 @@ async function handleVoiceThreadCommand(
     }
     for (const m of resolveMembers(command.addNames)) {
       if (!assignees.find((a) => a.id === m.id)) assignees.push(m);
+    }
+    if (assignees.length === 0) {
+      // Default to current thread assignees rather than asking
+      assignees = [...new Set(threadTasks.map((t) => t.assigned_to_id as string))].map((id) => {
+        const t = threadTasks.find((x) => x.assigned_to_id === id)!;
+        return { id, name: t.assigned_to_name as string };
+      });
     }
     if (assignees.length === 0) {
       await postThreadReply(channelId, threadTs, "Who should this new task be assigned to? Please @mention them in a text reply.");
@@ -1277,6 +1393,40 @@ async function handleVoiceThreadCommand(
     })));
     const taskMentions = assignees.map((m) => `<@${m.id}>`).join(", ");
     await postThreadReply(channelId, threadTs, `✅ *New task added*\n\n*Assigned to:* ${taskMentions}\n\n${formatTaskBody(newText)}\n\n${taskMentions} — please reply *"done"* in this thread when complete.`);
+    return;
+  }
+
+  // ── REOPEN TASK ───────────────────────────────────────────────────────────
+  if (command.intent === "reopen_task") {
+    const { data: closedTasks } = await supabase
+      .from("tasks")
+      .select("*")
+      .eq("thread_ts", threadTs)
+      .in("status", ["cancelled", "completed"])
+      .order("created_at", { ascending: false });
+
+    if (!closedTasks || closedTasks.length === 0) {
+      await postThreadReply(channelId, threadTs, "There are no completed or cancelled tasks in this thread to reopen.");
+      return;
+    }
+
+    const nextFollowupAt2 = calculateNextFollowupAt(0, new Date(), process.env.TEAM_TIMEZONE ?? "UTC");
+    const idsToReopen = [...new Set(closedTasks.map((t) => t.id as string))];
+    await supabase.from("tasks").update({
+      status: "active",
+      completed_at: null,
+      next_followup_at: nextFollowupAt2?.toISOString() ?? null,
+      followup_count: 0,
+    }).in("id", idsToReopen);
+
+    const assigneeMentions = [...new Set(closedTasks.map((t) => t.assigned_to_id as string))]
+      .map((id) => `<@${id}>`).join(", ");
+    await postThreadReply(
+      channelId,
+      threadTs,
+      `🔁 Task reopened and follow-ups restarted.\n\n*Assigned to:* ${assigneeMentions}\n\n${formatTaskBody(closedTasks[0].task_text as string)}\n\n${assigneeMentions} — please reply *"done"* when complete.`
+    );
+    console.log("[voice-thread] reopen_task — reopened", idsToReopen.length, "task(s)");
     return;
   }
 
@@ -1409,7 +1559,7 @@ async function handleVoiceMessage(
     .map(m => m[1])
     .filter(id => id !== brandonUserId && id !== process.env.SLACK_BOT_USER_ID);
 
-  const matchedMembers: Array<{ id: string; name: string }> = [];
+  let matchedMembers: Array<{ id: string; name: string }> = [];
 
   // First: use explicit Slack @mentions
   for (const slackId of slackMentions) {
@@ -1430,6 +1580,11 @@ async function handleVoiceMessage(
       }
     }
   }
+
+  // Never assign to the bot itself
+  const botSelfId = await getBotUserId();
+  const botSelfEnv = process.env.SLACK_BOT_USER_ID ?? "";
+  matchedMembers = matchedMembers.filter((m) => m.id !== botSelfId && m.id !== botSelfEnv);
 
   // No assignee found — ask Brandon to clarify
   if (matchedMembers.length === 0) {
