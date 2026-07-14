@@ -196,42 +196,45 @@ async function handleMessageDeleted(
   channelId: string,
   supabase: ReturnType<typeof createSupabaseAdmin>
 ) {
-  // Search by thread_ts (catches all tasks in the thread, including ones created
-  // by later thread commands) AND by message_ts as a fallback.
+  // Search ALL statuses — we need to find the thread even if tasks are already
+  // cancelled, so we can still clean up orphaned bot replies in the channel.
   const { data: byThread } = await supabase
     .from("tasks")
     .select("id, status, thread_ts, channel_id")
-    .eq("thread_ts", deletedTs)
-    .in("status", ["active", "revision_requested", "completed"]);
+    .eq("thread_ts", deletedTs);
 
   const { data: byMessage } = await supabase
     .from("tasks")
     .select("id, status, thread_ts, channel_id")
-    .eq("message_ts", deletedTs)
-    .in("status", ["active", "revision_requested", "completed"]);
+    .eq("message_ts", deletedTs);
 
   const allTasks = [
     ...(byThread ?? []),
     ...(byMessage ?? []),
   ].filter((t, i, arr) => arr.findIndex((x) => x.id === t.id) === i);
 
-  if (allTasks.length === 0) {
-    console.log("[delete] no tasks found for ts:", deletedTs);
-    return;
+  // Cancel any tasks that are not already closed
+  const openTasks = allTasks.filter(
+    (t) => t.status !== "cancelled" && t.status !== "escalated"
+  );
+  if (openTasks.length > 0) {
+    const ids = openTasks.map((t) => t.id as string);
+    await supabase
+      .from("tasks")
+      .update({ status: "cancelled", next_followup_at: null })
+      .in("id", ids);
+    console.log("[delete] cancelled", ids.length, "task(s) for deleted ts:", deletedTs);
+  } else {
+    console.log("[delete] no open tasks to cancel for ts:", deletedTs, "(", allTasks.length, "already closed)");
   }
 
-  // Cancel all tasks in the DB
-  const ids = allTasks.map((t) => t.id as string);
-  await supabase
-    .from("tasks")
-    .update({ status: "cancelled", next_followup_at: null })
-    .in("id", ids);
-
-  console.log("[delete] cancelled", ids.length, "task(s) for deleted ts:", deletedTs);
-
-  // Delete every bot message in the thread so there's no orphaned follow-up trail
+  // Always clean up bot replies — even when no DB tasks were found, orphaned bot
+  // messages may still be visible in the thread.
   const resolvedChannelId = channelId || (allTasks[0]?.channel_id as string);
-  if (!resolvedChannelId) return;
+  if (!resolvedChannelId) {
+    console.log("[delete] no channel ID available, skipping bot message cleanup");
+    return;
+  }
 
   try {
     const botUserId = await getBotUserId();
