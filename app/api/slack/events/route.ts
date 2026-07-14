@@ -720,23 +720,31 @@ async function handleBotMentionInThread(
   }
 
   // Task summary request — answer directly without calling GPT
+  // Matches: "summary", "any summary", "summarize", "give me summary", "summary of this thread", etc.
   const isSummaryRequest =
-    /\b(what (are|is)|list|show|summary|status of).*task|task.*(list|status|summary|what)/i.test(textContent) ||
-    /\b(any\s+)?summar(y|ize|ies)\b/i.test(textContent);
+    /\b(what (are|is)|list|show|status of).*task|task.*(list|status|what)/i.test(textContent) ||
+    /\bsummar(y|ize|ies)\b/i.test(textContent);
   if (isSummaryRequest) {
-    const allThreadTasks = await supabase
+    // Only the manager (Brandon) can request summaries — others are silently ignored
+    const brandonId = process.env.SLACK_BRANDON_USER_ID ?? "";
+    if (senderId !== brandonId) {
+      console.log("[thread-cmd] summary request from non-manager — ignoring silently");
+      return;
+    }
+
+    const { data: summaryTasks } = await supabase
       .from("tasks")
       .select("*")
       .eq("thread_ts", threadTs)
       .order("created_at", { ascending: true });
 
-    const tasks = allThreadTasks.data ?? [];
+    const tasks = summaryTasks ?? [];
     if (tasks.length === 0) {
       await postThreadReply(channelId, threadTs, "No tasks found in this thread.");
       return;
     }
 
-    // Group rows by task_text so same task assigned to multiple people shows as one entry
+    // Group rows by task_text so the same task assigned to multiple people shows as one entry
     const groupMap = new Map<string, typeof tasks>();
     for (const t of tasks) {
       const key = t.task_text as string;
@@ -744,17 +752,47 @@ async function handleBotMentionInThread(
       groupMap.get(key)!.push(t);
     }
 
+    const taskCount = groupMap.size;
     const lines = [...groupMap.entries()].map(([taskText, group], i) => {
-      const allDone = group.every(t => t.status === "completed");
-      const allCancelled = group.every(t => t.status === "cancelled");
-      const icon = allDone ? "✅" : allCancelled ? "🗑️" : "🔵";
-      const perAssignee = group.map(t => {
-        const s = t.status === "completed" ? "Done ✅" : t.status === "cancelled" ? "Cancelled 🗑️" : `Active · ${t.followup_count}/5 follow-ups sent`;
-        return `<@${t.assigned_to_id}>: ${s}`;
-      }).join("\n      ");
-      return `${icon} *Task ${i + 1}:* ${taskText}\n      ${perAssignee}`;
+      const activeRows    = group.filter(t => t.status === "active" || t.status === "revision_requested");
+      const completedRows = group.filter(t => t.status === "completed");
+      const cancelledRows = group.filter(t => t.status === "cancelled" || t.status === "escalated");
+
+      const allDone      = group.every(t => t.status === "completed");
+      const noneActive   = activeRows.length === 0 && completedRows.length === 0;
+      const icon = allDone ? "✅" : noneActive ? "🗑️" : "🔵";
+      const label = taskCount === 1 ? `*Task:*` : `*Task ${i + 1}:*`;
+
+      const parts: string[] = [`${icon} ${label} ${taskText}`];
+
+      // Current active assignees
+      if (activeRows.length > 0) {
+        const detail = activeRows.length === 1
+          ? `<@${activeRows[0].assigned_to_id}> · Active · ${activeRows[0].followup_count}/5 follow-ups sent`
+          : activeRows.map(t => `<@${t.assigned_to_id}> (${t.followup_count}/5 follow-ups)`).join(", ") + " · Active";
+        parts.push(`   📌 *Assigned to:* ${detail}`);
+      }
+
+      // Completed assignees
+      if (completedRows.length > 0) {
+        const names = completedRows.map(t => `<@${t.assigned_to_id}>`).join(", ");
+        parts.push(`   ✅ *Completed by:* ${names}`);
+      }
+
+      // History: cancelled rows alongside active/completed = reassignment happened
+      if (cancelledRows.length > 0 && (activeRows.length > 0 || completedRows.length > 0)) {
+        const from = cancelledRows.map(t => t.assigned_to_name as string).join(", ");
+        const to   = [...activeRows, ...completedRows].map(t => t.assigned_to_name as string).join(", ");
+        parts.push(`   🔄 *History:* Originally assigned to ${from} → Reassigned to ${to}`);
+      } else if (noneActive && cancelledRows.length > 0) {
+        const who = cancelledRows.map(t => `<@${t.assigned_to_id}>`).join(", ");
+        parts.push(`   🗑️ *Cancelled* — was assigned to ${who}`);
+      }
+
+      return parts.join("\n");
     });
-    await postThreadReply(channelId, threadTs, `📋 *Tasks in this thread:*\n\n${lines.join("\n\n")}`);
+
+    await postThreadReply(channelId, threadTs, `📋 *Task Summary*\n\n${lines.join("\n\n")}`);
     return;
   }
 
