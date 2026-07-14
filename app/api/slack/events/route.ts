@@ -98,8 +98,9 @@ async function processSlackEvent(event: Record<string, unknown>) {
   // Do this BEFORE the generic subtype guard since message_deleted is a subtype.
   if (event.subtype === "message_deleted") {
     const deletedTs = (event.deleted_ts as string) ?? (event.previous_message as Record<string, unknown>)?.ts as string;
+    const channelId = event.channel as string;
     if (deletedTs) {
-      await handleMessageDeleted(deletedTs, supabase);
+      await handleMessageDeleted(deletedTs, channelId, supabase);
     }
     return;
   }
@@ -192,29 +193,76 @@ function formatTaskBody(text: string): string {
 
 async function handleMessageDeleted(
   deletedTs: string,
+  channelId: string,
   supabase: ReturnType<typeof createSupabaseAdmin>
 ) {
-  // Find active tasks whose root message matches the deleted timestamp.
-  // message_ts is the ts of the original task-assignment message.
-  const { data: tasks } = await supabase
+  // Search by thread_ts (catches all tasks in the thread, including ones created
+  // by later thread commands) AND by message_ts as a fallback.
+  const { data: byThread } = await supabase
     .from("tasks")
-    .select("id, status")
-    .eq("message_ts", deletedTs)
-    .in("status", ["active", "revision_requested"]);
+    .select("id, status, thread_ts, channel_id")
+    .eq("thread_ts", deletedTs)
+    .in("status", ["active", "revision_requested", "completed"]);
 
-  if (!tasks || tasks.length === 0) {
-    console.log("[delete] no active tasks found for ts:", deletedTs);
+  const { data: byMessage } = await supabase
+    .from("tasks")
+    .select("id, status, thread_ts, channel_id")
+    .eq("message_ts", deletedTs)
+    .in("status", ["active", "revision_requested", "completed"]);
+
+  const allTasks = [
+    ...(byThread ?? []),
+    ...(byMessage ?? []),
+  ].filter((t, i, arr) => arr.findIndex((x) => x.id === t.id) === i);
+
+  if (allTasks.length === 0) {
+    console.log("[delete] no tasks found for ts:", deletedTs);
     return;
   }
 
-  const ids = tasks.map((t) => t.id as string);
+  // Cancel all tasks in the DB
+  const ids = allTasks.map((t) => t.id as string);
   await supabase
     .from("tasks")
     .update({ status: "cancelled", next_followup_at: null })
     .in("id", ids);
 
-  console.log("[delete] cancelled", ids.length, "task(s) for deleted message ts:", deletedTs);
-  // No reply — the thread is gone.
+  console.log("[delete] cancelled", ids.length, "task(s) for deleted ts:", deletedTs);
+
+  // Delete every bot message in the thread so there's no orphaned follow-up trail
+  const resolvedChannelId = channelId || (allTasks[0]?.channel_id as string);
+  if (!resolvedChannelId) return;
+
+  try {
+    const botUserId = await getBotUserId();
+    const botEnvId = process.env.SLACK_BOT_USER_ID ?? "";
+    const slack = getSlackClient();
+
+    const replies = await slack.conversations.replies({
+      channel: resolvedChannelId,
+      ts: deletedTs,
+      limit: 200,
+    });
+
+    const botMessages = (replies.messages ?? []).filter((m) => {
+      const isBot = m.user === botUserId || m.user === botEnvId || !!m.bot_id;
+      const isRoot = m.ts === deletedTs;
+      return isBot && !isRoot; // don't try to delete the already-deleted root
+    });
+
+    console.log("[delete] deleting", botMessages.length, "bot message(s) from thread");
+
+    await Promise.all(
+      botMessages.map((m) =>
+        slack.chat.delete({ channel: resolvedChannelId, ts: m.ts! }).catch((err) => {
+          console.error("[delete] failed to delete message ts:", m.ts, err?.data?.error);
+        })
+      )
+    );
+  } catch (err) {
+    // Thread may already be gone — log and continue
+    console.error("[delete] error fetching/deleting thread messages:", err);
+  }
 }
 
 async function handleNewTaskMention(
