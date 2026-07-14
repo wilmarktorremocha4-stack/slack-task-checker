@@ -534,6 +534,10 @@ async function handleThreadReply(
       (t) => (t.assignee_ids?.includes(userId) || t.assigned_to_id === userId)
     );
     const targetTask = myTasks[taskIndex];
+    if (targetTask && targetTask.status === "completed") {
+      await postThreadReply(task.channel_id, task.thread_ts, `✅ *Task ${taskIndex + 1}* is already marked as done:\n> ${targetTask.task_text}`);
+      return;
+    }
     if (targetTask && (targetTask.status === "active" || targetTask.status === "revision_requested")) {
       await supabase.from("tasks").update({ status: "completed", completed_at: new Date().toISOString(), next_followup_at: null }).eq("id", targetTask.id);
 
@@ -853,16 +857,16 @@ async function handleBotMentionInThread(
   // Handle "task N done/complete/finished" directed at bot — intercept before
   // parseThreadCommand so GPT doesn't classify it as "unknown" and show help menu.
   const botTaskDoneMatch = textContent.match(/task\s*(\d+)\s*(is\s*)?(done|complete|finished)/i);
-  const senderIsAssignee = threadTasks.some(
-    t => (t.assigned_to_id === senderId || t.assignee_ids?.includes(senderId)) &&
-         (t.status === "active" || t.status === "revision_requested")
-  );
-  if (botTaskDoneMatch && senderIsAssignee) {
+  if (botTaskDoneMatch) {
     const taskIndex = parseInt(botTaskDoneMatch[1]) - 1;
     const senderTasks = threadTasks.filter(
       t => t.assigned_to_id === senderId || t.assignee_ids?.includes(senderId)
     );
     const targetTask = senderTasks[taskIndex];
+    if (targetTask && targetTask.status === "completed") {
+      await postThreadReply(channelId, threadTs, `✅ *Task ${taskIndex + 1}* is already marked as done:\n> ${targetTask.task_text}`);
+      return;
+    }
     if (targetTask && (targetTask.status === "active" || targetTask.status === "revision_requested")) {
       await supabase.from("tasks").update({
         status: "completed",
@@ -898,7 +902,11 @@ async function handleBotMentionInThread(
 
   console.log("[thread-cmd] parsing command:", humanText.slice(0, 150));
 
-  const allActiveTaskTexts = [...new Set(activeThreadTasks.map((t) => t.task_text as string))];
+  const allActiveTaskTexts = [...new Set(
+    activeThreadTasks
+      .filter((t) => t.status === "active" || t.status === "revision_requested")
+      .map((t) => t.task_text as string)
+  )];
   const allClosedTaskTexts = [...new Set(
     threadTasks
       .filter((t) => t.status === "cancelled" || t.status === "completed" || t.status === "escalated")
