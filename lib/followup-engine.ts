@@ -55,7 +55,10 @@ export async function sendFollowupForTask(
 
   const taskAgeMs = now.getTime() - new Date(task.created_at).getTime();
   const taskAgeDays = taskAgeMs / (1000 * 60 * 60 * 24);
-  const isOverdue = taskAgeDays >= 5;
+  // Use 8 calendar days to cover the worst case: a Friday-created task needs
+  // 5 business days which spans 7 calendar days (Fri + Mon–Fri). Using 5 caused
+  // premature escalation after only 2–3 follow-ups for weekend-adjacent tasks.
+  const isOverdue = taskAgeDays >= 8;
   const maxFollowupsReached = newFollowupCount > maxFollowups;
 
   if (maxFollowupsReached || isOverdue) {

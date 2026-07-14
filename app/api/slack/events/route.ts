@@ -341,6 +341,16 @@ async function handleNewTaskMention(
     return;
   }
 
+  // Idempotency guard — Slack retries events on network errors; skip if already inserted
+  const { count: existingCount } = await supabase
+    .from("tasks")
+    .select("id", { count: "exact", head: true })
+    .eq("message_ts", messageTs);
+  if (existingCount && existingCount > 0) {
+    console.log("[task] dedup — task already exists for message_ts:", messageTs);
+    return;
+  }
+
   const nextFollowupAt = calculateNextFollowupAt(0, new Date(), process.env.TEAM_TIMEZONE ?? "UTC");
   console.log("[task] step 6 — inserting task into supabase, nextFollowupAt:", nextFollowupAt);
 
@@ -421,9 +431,10 @@ async function handleThreadReply(
 
   if (pendingVoice && userId === process.env.SLACK_BRANDON_USER_ID) {
     const rawReplyText = (event.text as string) ?? "";
+    const botIdForFilter = cachedBotUserId || (process.env.SLACK_BOT_USER_ID ?? "");
     const replyMentions = [...rawReplyText.matchAll(/<@([A-Z0-9]+)>/g)]
       .map(m => m[1])
-      .filter(id => id !== process.env.SLACK_BRANDON_USER_ID);
+      .filter(id => id !== process.env.SLACK_BRANDON_USER_ID && id !== botIdForFilter);
 
     // Only resolve the pending task if the message is primarily an assignment
     // (short text, essentially just @mentions). If Brandon is writing a full
@@ -686,7 +697,8 @@ async function handleThreadReply(
 
   // Log every other human reply for full thread visibility on the dashboard
   if (rawText.length > 0) {
-    const authorName = isAssignee ? task.assigned_to_name : await getSlackUserName(userId);
+    const senderTask = allThreadTasks.find(t => t.assigned_to_id === userId || t.assignee_ids?.includes(userId));
+    const authorName = isAssignee ? (senderTask?.assigned_to_name ?? task.assigned_to_name) : await getSlackUserName(userId);
     await supabase.from("task_comments").insert({
       task_id: task.id,
       author_type: isAssignee ? "assignee" : "system",
@@ -725,9 +737,10 @@ async function handleBotMentionInThread(
     return;
   }
 
-  // Active tasks for command context (reassign, add, etc.)
+  // Active tasks for command context (reassign, add, etc.) — completed tasks are excluded
+  // so they are never re-cancelled by remove/reassign/cancel operations.
   const activeThreadTasks = threadTasks.filter(
-    (t) => t.status !== "cancelled" && t.status !== "escalated"
+    (t) => t.status === "active" || t.status === "revision_requested"
   );
 
   const teamMembers = await getWorkspaceMembers();
@@ -860,7 +873,8 @@ async function handleBotMentionInThread(
   if (botTaskDoneMatch) {
     const taskIndex = parseInt(botTaskDoneMatch[1]) - 1;
     const senderTasks = threadTasks.filter(
-      t => t.assigned_to_id === senderId || t.assignee_ids?.includes(senderId)
+      t => (t.assigned_to_id === senderId || t.assignee_ids?.includes(senderId)) &&
+           t.status !== "cancelled" && t.status !== "escalated"
     );
     const targetTask = senderTasks[taskIndex];
     if (targetTask && targetTask.status === "completed") {
@@ -1026,9 +1040,10 @@ async function handleBotMentionInThread(
     const removeIds = toRemove.map((m) => m.id);
     await supabase
       .from("tasks")
-      .update({ status: "cancelled" })
+      .update({ status: "cancelled", next_followup_at: null })
       .eq("thread_ts", threadTs)
-      .in("assigned_to_id", removeIds);
+      .in("assigned_to_id", removeIds)
+      .in("status", ["active", "revision_requested"]);
 
     const removedMentions = toRemove.map((m) => `<@${m.id}>`).join(", ");
     await postThreadReply(channelId, threadTs, `🗑️ Removed ${removedMentions} from this task.`);
@@ -1499,9 +1514,10 @@ async function handleVoiceThreadCommand(
     }
     await supabase
       .from("tasks")
-      .update({ status: "cancelled" })
+      .update({ status: "cancelled", next_followup_at: null })
       .eq("thread_ts", threadTs)
-      .in("assigned_to_id", toRemove.map((m) => m.id));
+      .in("assigned_to_id", toRemove.map((m) => m.id))
+      .in("status", ["active", "revision_requested"]);
     await postThreadReply(channelId, threadTs, `🗑️ Removed ${toRemove.map((m) => `<@${m.id}>`).join(", ")} from this task.`);
     return;
   }
@@ -1677,8 +1693,8 @@ async function handleVoiceThreadCommand(
       return;
     }
     const namedAssignees = resolveMembers(command.addNames);
-    const existingAssignees = [...new Set(threadTasks.map((t) => t.assigned_to_id as string))].map((id) => {
-      const t = threadTasks.find((x) => x.assigned_to_id === id)!;
+    const existingAssignees = [...new Set(activeThreadTasks.map((t) => t.assigned_to_id as string))].map((id) => {
+      const t = activeThreadTasks.find((x) => x.assigned_to_id === id)!;
       return { id, name: t.assigned_to_name as string };
     });
     let assignees: Array<{ id: string; name: string }>;

@@ -390,6 +390,6 @@ export async function generateEscalationMessage(options: {
     `*Status:* No response after 5 follow-ups\n\n` +
     `${assigneeName} has not confirmed completion of this task after 5 automated follow-ups. ` +
     `You may want to reach out directly.\n\n` +
-    `<slack://channel?team=T&id=${channelId}&message=${threadTs}|View original thread>`
+    `<https://${process.env.SLACK_WORKSPACE_DOMAIN ?? "app"}.slack.com/archives/${channelId}/p${threadTs.replace(".", "")}|View original thread>`
   );
 }
