@@ -179,6 +179,17 @@ async function processSlackEvent(event: Record<string, unknown>) {
   // Everything else (top-level channel messages, reactions, etc.) — ignore silently
 }
 
+// Save a bot-posted message ts so handleMessageDeleted can clean it up later.
+async function saveBotMessageTs(
+  supabase: ReturnType<typeof createSupabaseAdmin>,
+  channelId: string,
+  threadTs: string,
+  messageTs: string | null
+) {
+  if (!messageTs) return;
+  await supabase.from("bot_messages").insert({ channel_id: channelId, thread_ts: threadTs, message_ts: messageTs }).catch(() => {});
+}
+
 // Format task text for Slack messages.
 // Single task  → "*Task:* Buy yellow paper"
 // Multi-line   → "*Task 1:* Buy yellow paper\n*Task 2:* Cook adobo"
@@ -236,10 +247,37 @@ async function handleMessageDeleted(
     return;
   }
 
+  const slack = getSlackClient();
+
+  // Primary path: use stored bot message timestamps from the bot_messages table.
+  // These are saved whenever the bot posts, so deletion works even when the
+  // Slack API can't return thread replies for a deleted audio/file root message.
+  const { data: storedBotMessages } = await supabase
+    .from("bot_messages")
+    .select("message_ts")
+    .eq("channel_id", resolvedChannelId)
+    .eq("thread_ts", deletedTs);
+
+  if (storedBotMessages && storedBotMessages.length > 0) {
+    console.log("[delete] deleting", storedBotMessages.length, "stored bot message(s)");
+    await Promise.all(
+      storedBotMessages.map((row) =>
+        slack.chat.delete({ channel: resolvedChannelId, ts: row.message_ts }).catch((err) => {
+          console.error("[delete] failed to delete stored message ts:", row.message_ts, err?.data?.error);
+        })
+      )
+    );
+    // Clean up the stored references too
+    await supabase.from("bot_messages").delete().eq("thread_ts", deletedTs).eq("channel_id", resolvedChannelId);
+    return;
+  }
+
+  // Fallback: stored records not found — try conversations.replies.
+  // This works for text messages (root remains as "deleted" placeholder) but
+  // may fail for audio/file messages where Slack removes the thread anchor.
   try {
     const botUserId = await getBotUserId();
     const botEnvId = process.env.SLACK_BOT_USER_ID ?? "";
-    const slack = getSlackClient();
 
     const replies = await slack.conversations.replies({
       channel: resolvedChannelId,
@@ -250,10 +288,10 @@ async function handleMessageDeleted(
     const botMessages = (replies.messages ?? []).filter((m) => {
       const isBot = m.user === botUserId || m.user === botEnvId || !!m.bot_id;
       const isRoot = m.ts === deletedTs;
-      return isBot && !isRoot; // don't try to delete the already-deleted root
+      return isBot && !isRoot;
     });
 
-    console.log("[delete] deleting", botMessages.length, "bot message(s) from thread");
+    console.log("[delete] fallback: deleting", botMessages.length, "bot message(s) from thread");
 
     await Promise.all(
       botMessages.map((m) =>
@@ -263,8 +301,7 @@ async function handleMessageDeleted(
       )
     );
   } catch (err) {
-    // Thread may already be gone — log and continue
-    console.error("[delete] error fetching/deleting thread messages:", err);
+    console.error("[delete] conversations.replies failed — bot messages in thread may need manual cleanup:", err);
   }
 }
 
@@ -386,13 +423,14 @@ async function handleNewTaskMention(
 
   const allMentions = assignees.map(a => `<@${a.id}>`).join(", ");
 
-  await postThreadReply(
+  const confirmTs = await postThreadReply(
     channelId,
     threadTs,
     `✅ *Task assigned*\n\n*Assigned to:* ${allMentions}\n\n` +
       formatTaskBody(parsed.taskText) +
       `\n\n${allMentions} — please reply *"done"* in this thread when the task is complete. Use this thread for any questions.`
   );
+  await saveBotMessageTs(supabase, channelId, threadTs, confirmTs);
 
   console.log("[task] done — task created successfully");
 }
@@ -1772,11 +1810,12 @@ async function handleVoiceMessage(
   const threadTs = messageTs;
   const senderId = event.user as string;
 
-  await postThreadReply(
+  const transcribingTs = await postThreadReply(
     channelId,
     threadTs,
     "🎙️ Got your voice note! Transcribing now..."
   );
+  await saveBotMessageTs(supabase, channelId, threadTs, transcribingTs);
 
   const fileUrl =
     (audioFile.url_private_download as string) ||
@@ -1877,13 +1916,14 @@ async function handleVoiceMessage(
       created_by_name: assignerName,
     });
 
-    await postThreadReply(
+    const pendingConfirmTs = await postThreadReply(
       channelId,
       threadTs,
       `📝 Transcribed your voice note!\n\n*Task:* ${parsed.summary}\n\n` +
         `<@${brandonUserId}> — who should this be assigned to? ` +
         `Please @mention them in a reply here and I'll create the task automatically.`
     );
+    await saveBotMessageTs(supabase, channelId, threadTs, pendingConfirmTs);
     return;
   }
 
@@ -1942,7 +1982,7 @@ async function handleVoiceMessage(
     ? `Use *"Task 1 done"*, *"Task 2 done"*, etc. to mark each task complete. Use this thread for any questions.`
     : `please reply *"done"* in this thread when the task is complete. Use this thread for any questions.`;
 
-  await postThreadReply(
+  const voiceConfirmTs = await postThreadReply(
     channelId,
     threadTs,
     `✅ *Task assigned from voice note*\n\n` +
@@ -1950,6 +1990,7 @@ async function handleVoiceMessage(
       formatTaskBody(parsed.taskText) +
       `\n\n${assigneeMentions} — ${doneInstruction}`
   );
+  await saveBotMessageTs(supabase, channelId, threadTs, voiceConfirmTs);
 
   console.log("[voice] tasks created for:", matchedMembers.map(m => m.name).join(", "), "task:", parsed.taskText.slice(0, 80));
 }

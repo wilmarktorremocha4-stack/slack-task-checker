@@ -58,15 +58,16 @@ export async function postThreadReply(
   threadTs: string,
   text: string,
   options?: { broadcast?: boolean }
-): Promise<void> {
+): Promise<string | null> {
   const slack = getSlackClient();
-  await slack.chat.postMessage({
+  const result = await slack.chat.postMessage({
     channel: channelId,
     thread_ts: threadTs,
     text,
     mrkdwn: true,
     reply_broadcast: options?.broadcast ?? false,
   });
+  return (result.ts as string) ?? null;
 }
 
 // Post a message with a colored left-border stripe using Slack attachments.
@@ -81,7 +82,7 @@ export async function postColoredMessage(
   text: string,
   contextLine?: string,
   options?: { broadcast?: boolean }
-): Promise<void> {
+): Promise<string | null> {
   const slack = getSlackClient();
   const blocks = contextLine
     ? [
@@ -90,7 +91,7 @@ export async function postColoredMessage(
       ]
     : [{ type: "section", text: { type: "mrkdwn", text } }];
 
-  await slack.chat.postMessage({
+  const result = await slack.chat.postMessage({
     channel: channelId,
     thread_ts: threadTs,
     reply_broadcast: options?.broadcast ?? false,
@@ -102,6 +103,7 @@ export async function postColoredMessage(
       },
     ],
   });
+  return (result.ts as string) ?? null;
 }
 
 // Slack only notifies a user when the raw <@ID> syntax is used
