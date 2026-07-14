@@ -286,6 +286,8 @@ Examples:
 export async function parseThreadCommand(options: {
   messageText: string;
   existingTaskText: string;
+  allTaskTexts?: string[];
+  closedTaskTexts?: string[];
   existingAssigneeNames: string[];
   teamMemberNames: string[];
 }): Promise<{
@@ -293,10 +295,20 @@ export async function parseThreadCommand(options: {
   addNames: string[];
   removeNames: string[];
   newTaskText: string | null;
+  targetTaskText: string | null;
   keepExistingAssignees: boolean;
 } | null> {
   try {
     const openai = getOpenAIClient();
+
+    const activeTasksBlock = (options.allTaskTexts && options.allTaskTexts.length > 1)
+      ? `Active tasks in this thread:\n${options.allTaskTexts.map((t, i) => `${i + 1}. "${t}"`).join("\n")}`
+      : `Current task: "${options.existingTaskText}"`;
+
+    const closedTasksBlock = (options.closedTaskTexts && options.closedTaskTexts.length > 0)
+      ? `\nClosed/cancelled tasks in this thread:\n${options.closedTaskTexts.map((t, i) => `${i + 1}. "${t}"`).join("\n")}`
+      : "";
+
     const response = await openai.chat.completions.create({
       model: "gpt-4o",
       messages: [
@@ -304,7 +316,7 @@ export async function parseThreadCommand(options: {
           role: "system",
           content: `You manage tasks in a Slack workspace. A user has @mentioned the task bot inside an existing task thread to give a command.
 
-Current task: "${options.existingTaskText}"
+${activeTasksBlock}${closedTasksBlock}
 Current assignees: ${options.existingAssigneeNames.join(", ")}
 Known team members: ${options.teamMemberNames.join(", ")}
 
@@ -314,6 +326,7 @@ Classify the user's intent and return JSON:
   "addNames": ["name"],
   "removeNames": ["name"],
   "newTaskText": "description" | null,
+  "targetTaskText": "exact task text being targeted" | null,
   "keepExistingAssignees": boolean
 }
 
@@ -321,18 +334,24 @@ Intent rules:
 - add_assignee: adding someone new to the EXISTING task (e.g. "also assign to X", "add X")
 - remove_assignee: removing a specific PERSON from the task (e.g. "remove X", "unassign X")
 - reassign: replacing all assignees with new people (e.g. "only assign to X", "give this only to X", "remove X and assign to Y")
-- add_task: creating a brand-new separate task in this same thread without cancelling existing (e.g. "add another task", "also ask them to do X")
-- cancel_task: cancelling/deleting the whole task, NO replacement (e.g. "remove that task", "delete this", "cancel that", "task is wrong remove it")
-- cancel_and_replace: cancel the current task AND immediately create a new one in its place. Use this when the person says something like "cancel this and add X", "remove that and the new task is X", "wrong task, the correct one is X", "replace with X", "change the task to X". Set newTaskText to the replacement task description.
-- reopen_task: reactivating a completed or cancelled task (e.g. "reopen this task", "restart the task", "uncancel this", "bring back the task", "activate this again")
+- add_task: creating a brand-new separate task in this same thread without cancelling existing (e.g. "add another task", "also ask them to do X", "add task: X")
+- cancel_task: cancelling/deleting a task, NO replacement (e.g. "cancel the cabinet task", "remove the plates task", "delete this task")
+- cancel_and_replace: cancel a task AND immediately create a new one. Use ONLY when the person provides both a removal AND explicit replacement text in the same message (e.g. "change the cabinet task to buy chairs", "replace this with X", "wrong task, the correct one is X").
+- reopen_task: reactivating a completed or cancelled task (e.g. "restore the plates task", "reopen this task", "uncancel this", "bring back the task")
 - unknown: can't determine intent
 
-IMPORTANT: If the message contains BOTH a cancellation/removal AND a new task description in the same sentence, always use cancel_and_replace — never split them or use cancel_task alone.
+CRITICAL: "Cancel the [task name]" with NO new task mentioned → cancel_task, NOT cancel_and_replace.
+CRITICAL: cancel_and_replace requires the user to explicitly state BOTH what to cancel AND what to replace it with.
+
+targetTaskText rules:
+- For cancel_task: set to the exact task text from the active tasks list that matches what the user wants to cancel. Match using the user's description — e.g. "the cabinet task" → "Buy a cabinet." If the user says "cancel all" or there's only one task, set null.
+- For reopen_task: set to the exact task text from the closed tasks list that the user wants to restore. If there's only one closed task or the user says "restore all", set null.
+- For all other intents: set null.
+- Always copy the task text exactly from the provided list — do not paraphrase or invent.
 
 For keepExistingAssignees — set to TRUE when the message implies keeping the current assignees AND adding more people:
-  - "add also @Harry" → keepExistingAssignees: true, addNames: ["Harry"]  (keep Makoy + add Harry)
+  - "add also @Harry" → keepExistingAssignees: true, addNames: ["Harry"]
   - "include @Harry too" → keepExistingAssignees: true, addNames: ["Harry"]
-  - "assign to @Harry as well" → keepExistingAssignees: true, addNames: ["Harry"]
 Set to FALSE when replacing: "only @Harry", "reassign to @Harry", "give it to @Harry instead".
 
 For add_task and cancel_and_replace: set newTaskText to the exact task description from the message.
@@ -343,7 +362,7 @@ Extract names from the known team member list that match names mentioned. Be fuz
           content: options.messageText,
         },
       ],
-      max_tokens: 300,
+      max_tokens: 400,
       temperature: 0,
       response_format: { type: "json_object" },
     });

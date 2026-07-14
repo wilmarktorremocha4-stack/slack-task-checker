@@ -873,9 +873,18 @@ async function handleBotMentionInThread(
 
   console.log("[thread-cmd] parsing command:", humanText.slice(0, 150));
 
+  const allActiveTaskTexts = [...new Set(activeThreadTasks.map((t) => t.task_text as string))];
+  const allClosedTaskTexts = [...new Set(
+    threadTasks
+      .filter((t) => t.status === "cancelled" || t.status === "completed" || t.status === "escalated")
+      .map((t) => t.task_text as string)
+  )];
+
   const command = await parseThreadCommand({
     messageText: humanText,
     existingTaskText,
+    allTaskTexts: allActiveTaskTexts,
+    closedTaskTexts: allClosedTaskTexts,
     existingAssigneeNames,
     teamMemberNames: teamMembers.map((m) => m.name),
   });
@@ -1130,8 +1139,19 @@ async function handleBotMentionInThread(
       return;
     }
 
+    // Target a specific task if GPT identified one; otherwise reopen all closed tasks
+    let tasksToReopen = closedTasks;
+    if (command.targetTaskText) {
+      const tLower = command.targetTaskText.toLowerCase();
+      const matched = closedTasks.filter((t) => {
+        const text = (t.task_text as string).toLowerCase();
+        return text === tLower || text.includes(tLower) || tLower.includes(text);
+      });
+      if (matched.length > 0) tasksToReopen = matched;
+    }
+
     const nextFollowupAt2 = calculateNextFollowupAt(0, new Date(), process.env.TEAM_TIMEZONE ?? "UTC");
-    const idsToReopen = [...new Set(closedTasks.map((t) => t.id as string))];
+    const idsToReopen = [...new Set(tasksToReopen.map((t) => t.id as string))];
     await supabase.from("tasks").update({
       status: "active",
       completed_at: null,
@@ -1139,12 +1159,13 @@ async function handleBotMentionInThread(
       followup_count: 0,
     }).in("id", idsToReopen);
 
-    const assigneeMentions = [...new Set(closedTasks.map((t) => t.assigned_to_id as string))]
+    const assigneeMentions = [...new Set(tasksToReopen.map((t) => t.assigned_to_id as string))]
       .map((id) => `<@${id}>`).join(", ");
+    const reopenedTaskText = tasksToReopen[0].task_text as string;
     await postThreadReply(
       channelId,
       threadTs,
-      `🔁 Task reopened and follow-ups restarted.\n\n*Assigned to:* ${assigneeMentions}\n\n${formatTaskBody(closedTasks[0].task_text as string)}\n\n${assigneeMentions} — please reply *"done"* when complete.`
+      `🔁 Task reopened and follow-ups restarted.\n\n*Assigned to:* ${assigneeMentions}\n\n${formatTaskBody(reopenedTaskText)}\n\n${assigneeMentions} — please reply *"done"* when complete.`
     );
     console.log("[thread-cmd] reopen_task — reopened", idsToReopen.length, "task(s)");
     return;
@@ -1152,14 +1173,26 @@ async function handleBotMentionInThread(
 
   // ── CANCEL TASK ───────────────────────────────────────────────────────────
   if (command.intent === "cancel_task") {
-    const existingIds = activeThreadTasks.map((t) => t.id as string);
+    // Target a specific task if GPT identified one; otherwise cancel all active tasks
+    let tasksToCancel = activeThreadTasks;
+    if (command.targetTaskText) {
+      const tLower = command.targetTaskText.toLowerCase();
+      const matched = activeThreadTasks.filter((t) => {
+        const text = (t.task_text as string).toLowerCase();
+        return text === tLower || text.includes(tLower) || tLower.includes(text);
+      });
+      if (matched.length > 0) tasksToCancel = matched;
+    }
+    const existingIds = tasksToCancel.map((t) => t.id as string);
     await supabase.from("tasks").update({ status: "cancelled", next_followup_at: null }).in("id", existingIds);
+    const cancelledTexts = [...new Set(tasksToCancel.map((t) => t.task_text as string))];
+    const taskDesc = cancelledTexts.length === 1 ? `"${cancelledTexts[0]}"` : `${cancelledTexts.length} tasks`;
     await postThreadReply(
       channelId,
       threadTs,
-      `🗑️ Got it — task cancelled. No further follow-ups will be sent.\n\nIf you need to assign a new task, just @mention me here with the details.`
+      `🗑️ Got it — ${taskDesc} cancelled. No further follow-ups will be sent.\n\nIf you need to assign a new task, just @mention me here with the details.`
     );
-    console.log("[thread-cmd] cancel_task — cancelled", existingIds.length, "task(s)");
+    console.log("[thread-cmd] cancel_task — cancelled", existingIds.length, "task(s):", cancelledTexts.join("; "));
     return;
   }
 
@@ -1341,9 +1374,18 @@ async function handleVoiceThreadCommand(
   ];
 
   // ── Parse the transcription as a thread command ───────────────────────────
+  const voiceAllActiveTaskTexts = [...new Set(activeThreadTasks.map((t) => t.task_text as string))];
+  const voiceClosedTaskTexts = [...new Set(
+    threadTasks
+      .filter((t) => t.status === "cancelled" || t.status === "completed" || t.status === "escalated")
+      .map((t) => t.task_text as string)
+  )];
+
   const command = await parseThreadCommand({
     messageText: transcription,
     existingTaskText,
+    allTaskTexts: voiceAllActiveTaskTexts,
+    closedTaskTexts: voiceClosedTaskTexts,
     existingAssigneeNames,
     teamMemberNames: teamMembers.map((m) => m.name),
   });
@@ -1543,8 +1585,19 @@ async function handleVoiceThreadCommand(
       return;
     }
 
+    // Target a specific task if GPT identified one; otherwise reopen all closed tasks
+    let voiceTasksToReopen = closedTasks;
+    if (command.targetTaskText) {
+      const tLower = command.targetTaskText.toLowerCase();
+      const matched = closedTasks.filter((t) => {
+        const text = (t.task_text as string).toLowerCase();
+        return text === tLower || text.includes(tLower) || tLower.includes(text);
+      });
+      if (matched.length > 0) voiceTasksToReopen = matched;
+    }
+
     const nextFollowupAt2 = calculateNextFollowupAt(0, new Date(), process.env.TEAM_TIMEZONE ?? "UTC");
-    const idsToReopen = [...new Set(closedTasks.map((t) => t.id as string))];
+    const idsToReopen = [...new Set(voiceTasksToReopen.map((t) => t.id as string))];
     await supabase.from("tasks").update({
       status: "active",
       completed_at: null,
@@ -1552,12 +1605,13 @@ async function handleVoiceThreadCommand(
       followup_count: 0,
     }).in("id", idsToReopen);
 
-    const assigneeMentions = [...new Set(closedTasks.map((t) => t.assigned_to_id as string))]
+    const assigneeMentions = [...new Set(voiceTasksToReopen.map((t) => t.assigned_to_id as string))]
       .map((id) => `<@${id}>`).join(", ");
+    const reopenedText = voiceTasksToReopen[0].task_text as string;
     await postThreadReply(
       channelId,
       threadTs,
-      `🔁 Task reopened and follow-ups restarted.\n\n*Assigned to:* ${assigneeMentions}\n\n${formatTaskBody(closedTasks[0].task_text as string)}\n\n${assigneeMentions} — please reply *"done"* when complete.`
+      `🔁 Task reopened and follow-ups restarted.\n\n*Assigned to:* ${assigneeMentions}\n\n${formatTaskBody(reopenedText)}\n\n${assigneeMentions} — please reply *"done"* when complete.`
     );
     console.log("[voice-thread] reopen_task — reopened", idsToReopen.length, "task(s)");
     return;
@@ -1565,8 +1619,19 @@ async function handleVoiceThreadCommand(
 
   // ── CANCEL TASK ───────────────────────────────────────────────────────────
   if (command.intent === "cancel_task") {
-    await supabase.from("tasks").update({ status: "cancelled", next_followup_at: null }).in("id", activeThreadTasks.map((t) => t.id as string));
-    await postThreadReply(channelId, threadTs, `🗑️ Got it — task cancelled. No further follow-ups will be sent.`);
+    let voiceTasksToCancel = activeThreadTasks;
+    if (command.targetTaskText) {
+      const tLower = command.targetTaskText.toLowerCase();
+      const matched = activeThreadTasks.filter((t) => {
+        const text = (t.task_text as string).toLowerCase();
+        return text === tLower || text.includes(tLower) || tLower.includes(text);
+      });
+      if (matched.length > 0) voiceTasksToCancel = matched;
+    }
+    await supabase.from("tasks").update({ status: "cancelled", next_followup_at: null }).in("id", voiceTasksToCancel.map((t) => t.id as string));
+    const cancelledTexts = [...new Set(voiceTasksToCancel.map((t) => t.task_text as string))];
+    const taskDesc = cancelledTexts.length === 1 ? `"${cancelledTexts[0]}"` : `${cancelledTexts.length} tasks`;
+    await postThreadReply(channelId, threadTs, `🗑️ Got it — ${taskDesc} cancelled. No further follow-ups will be sent.`);
     return;
   }
 
