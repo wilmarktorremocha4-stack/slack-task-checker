@@ -520,11 +520,22 @@ async function handleThreadReply(
     const targetTask = myTasks[taskIndex];
     if (targetTask && (targetTask.status === "active" || targetTask.status === "revision_requested")) {
       await supabase.from("tasks").update({ status: "completed", completed_at: new Date().toISOString(), next_followup_at: null }).eq("id", targetTask.id);
-      await postThreadReply(
-        targetTask.channel_id,
-        targetTask.thread_ts,
-        `🎉 Got it ${targetTask.assigned_to_name}! *Task ${taskIndex + 1}* marked as done:\n> ${targetTask.task_text}\n\nI've stopped follow-ups for this one.`
+
+      const remainingAfterN = myTasks.filter(
+        t => t.id !== targetTask.id && (t.status === "active" || t.status === "revision_requested")
       );
+      let taskNDoneMsg = `🎉 Got it ${targetTask.assigned_to_name}! *Task ${taskIndex + 1}* marked as done:\n> ${targetTask.task_text}`;
+      if (remainingAfterN.length > 0) {
+        const remainingLines = remainingAfterN.map(t => {
+          const tNum = myTasks.findIndex(x => x.id === t.id) + 1;
+          return `*Task ${tNum}:* ${t.task_text}`;
+        }).join("\n");
+        taskNDoneMsg += `\n\n📋 *Still in progress:*\n${remainingLines}\n\nReply *"Task N done"* when each is complete.`;
+      } else {
+        taskNDoneMsg += `\n\nAll tasks complete! Nice one — I've stopped the follow-ups.`;
+      }
+
+      await postThreadReply(targetTask.channel_id, targetTask.thread_ts, taskNDoneMsg);
       await sendDirectMessage(
         process.env.SLACK_BRANDON_USER_ID!,
         `✅ *Task Completed*\n\n*Assignee:* ${targetTask.assigned_to_name}\n*Task:* ${targetTask.task_text}`
@@ -575,10 +586,31 @@ async function handleThreadReply(
       })
       .eq("id", taskToComplete.id);
 
+    // Check if this user has other active tasks remaining in the thread
+    const allMyTasks = allThreadTasks.filter(
+      t => t.assignee_ids?.includes(userId) || t.assigned_to_id === userId
+    );
+    const remainingActiveTasks = allMyTasks.filter(
+      t => t.id !== taskToComplete.id && (t.status === "active" || t.status === "revision_requested")
+    );
+    const completedTaskNumber = allMyTasks.findIndex(t => t.id === taskToComplete.id) + 1;
+    const showTaskNumber = allMyTasks.length > 1;
+
+    let completionMsg = `🎉 Great work ${taskToComplete.assigned_to_name}! ${showTaskNumber ? `*Task ${completedTaskNumber}* marked` : `Task marked`} as *done*:\n> ${taskToComplete.task_text}`;
+    if (remainingActiveTasks.length > 0) {
+      const remainingLines = remainingActiveTasks.map(t => {
+        const taskNum = allMyTasks.findIndex(x => x.id === t.id) + 1;
+        return `*Task ${taskNum}:* ${t.task_text}`;
+      }).join("\n");
+      completionMsg += `\n\n📋 *Still in progress:*\n${remainingLines}\n\nReply *"Task N done"* when each is complete.`;
+    } else {
+      completionMsg += `\n\nNice one — I've stopped the follow-ups.`;
+    }
+
     await postThreadReply(
       taskToComplete.channel_id,
       taskToComplete.thread_ts,
-      `🎉 Great work ${taskToComplete.assigned_to_name}! Task marked as *done*:\n> ${taskToComplete.task_text}\n\nNice one — I've stopped the follow-ups.`
+      completionMsg
     );
 
     await supabase.from("task_comments").insert([
@@ -794,6 +826,49 @@ async function handleBotMentionInThread(
 
     await postThreadReply(channelId, threadTs, `📋 *Task Summary*\n\n${lines.join("\n\n")}`);
     return;
+  }
+
+  // Handle "task N done/complete/finished" directed at bot — intercept before
+  // parseThreadCommand so GPT doesn't classify it as "unknown" and show help menu.
+  const botTaskDoneMatch = textContent.match(/task\s*(\d+)\s*(is\s*)?(done|complete|finished)/i);
+  const senderIsAssignee = threadTasks.some(
+    t => (t.assigned_to_id === senderId || t.assignee_ids?.includes(senderId)) &&
+         (t.status === "active" || t.status === "revision_requested")
+  );
+  if (botTaskDoneMatch && senderIsAssignee) {
+    const taskIndex = parseInt(botTaskDoneMatch[1]) - 1;
+    const senderTasks = threadTasks.filter(
+      t => t.assigned_to_id === senderId || t.assignee_ids?.includes(senderId)
+    );
+    const targetTask = senderTasks[taskIndex];
+    if (targetTask && (targetTask.status === "active" || targetTask.status === "revision_requested")) {
+      await supabase.from("tasks").update({
+        status: "completed",
+        completed_at: new Date().toISOString(),
+        next_followup_at: null,
+      }).eq("id", targetTask.id);
+
+      const remainingActive = senderTasks.filter(
+        t => t.id !== targetTask.id && (t.status === "active" || t.status === "revision_requested")
+      );
+      let replyMsg = `🎉 Got it! *Task ${taskIndex + 1}* marked as done:\n> ${targetTask.task_text}`;
+      if (remainingActive.length > 0) {
+        const remainingLines = remainingActive.map(t => {
+          const tNum = senderTasks.findIndex(x => x.id === t.id) + 1;
+          return `*Task ${tNum}:* ${t.task_text}`;
+        }).join("\n");
+        replyMsg += `\n\n📋 *Still in progress:*\n${remainingLines}\n\nReply *"Task N done"* when each is complete.`;
+      } else {
+        replyMsg += `\n\nAll tasks complete! Nice one — I've stopped the follow-ups.`;
+      }
+
+      await postThreadReply(channelId, threadTs, replyMsg);
+      await sendDirectMessage(
+        process.env.SLACK_BRANDON_USER_ID!,
+        `✅ *Task Completed*\n\n*Assignee:* ${targetTask.assigned_to_name}\n*Task:* ${targetTask.task_text}`
+      );
+      return;
+    }
   }
 
   console.log("[thread-cmd] parsing command:", humanText.slice(0, 150));
@@ -1670,7 +1745,7 @@ async function handleVoiceMessage(
     return;
   }
 
-  // Create tasks for all matched assignees
+  // Create tasks for all matched assignees — split multi-task text into separate rows
   const assignerName = await getSlackUserName(senderId);
   const nextFollowupAt = calculateNextFollowupAt(
     0,
@@ -1678,25 +1753,34 @@ async function handleVoiceMessage(
     process.env.TEAM_TIMEZONE ?? "UTC"
   );
 
-  const taskInserts = matchedMembers.map(member => ({
-    task_text: parsed.taskText,
-    raw_message: transcription,
-    voice_transcription: transcription,
-    assigned_to_id: member.id,
-    assigned_to_name: member.name,
-    assignee_ids: [member.id],
-    assignee_names: [member.name],
-    assigned_by_id: senderId,
-    assigned_by_name: assignerName,
-    channel_id: channelId,
-    message_ts: messageTs,
-    thread_ts: threadTs,
-    status: "active",
-    followup_count: 0,
-    max_followups: 5,
-    next_followup_at: nextFollowupAt?.toISOString() ?? null,
-    assignee_timezone: process.env.TEAM_TIMEZONE ?? "UTC",
-  }));
+  // Split on ";" or newlines so each sub-task gets its own DB row and can be
+  // individually marked done, rather than all being collapsed into one row.
+  const taskLines = parsed.taskText
+    .split(/\s*[;\n]\s*/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  const taskInserts = matchedMembers.flatMap(member =>
+    taskLines.map(taskLine => ({
+      task_text: taskLine,
+      raw_message: transcription,
+      voice_transcription: transcription,
+      assigned_to_id: member.id,
+      assigned_to_name: member.name,
+      assignee_ids: [member.id],
+      assignee_names: [member.name],
+      assigned_by_id: senderId,
+      assigned_by_name: assignerName,
+      channel_id: channelId,
+      message_ts: messageTs,
+      thread_ts: threadTs,
+      status: "active",
+      followup_count: 0,
+      max_followups: 5,
+      next_followup_at: nextFollowupAt?.toISOString() ?? null,
+      assignee_timezone: process.env.TEAM_TIMEZONE ?? "UTC",
+    }))
+  );
 
   const { error } = await supabase.from("tasks").insert(taskInserts);
 
@@ -1711,6 +1795,10 @@ async function handleVoiceMessage(
   }
 
   const assigneeMentions = matchedMembers.map(m => `<@${m.id}>`).join(", ");
+  const isMultiTask = taskLines.length > 1;
+  const doneInstruction = isMultiTask
+    ? `Use *"Task 1 done"*, *"Task 2 done"*, etc. to mark each task complete. Use this thread for any questions.`
+    : `please reply *"done"* in this thread when the task is complete. Use this thread for any questions.`;
 
   await postThreadReply(
     channelId,
@@ -1718,7 +1806,7 @@ async function handleVoiceMessage(
     `✅ *Task assigned from voice note*\n\n` +
       `*Assigned to:* ${assigneeMentions}\n\n` +
       formatTaskBody(parsed.taskText) +
-      `\n\n${assigneeMentions} — please reply *"done"* in this thread when the task is complete. Use this thread for any questions.`
+      `\n\n${assigneeMentions} — ${doneInstruction}`
   );
 
   console.log("[voice] tasks created for:", matchedMembers.map(m => m.name).join(", "), "task:", parsed.taskText.slice(0, 80));
