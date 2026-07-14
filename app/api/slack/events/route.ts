@@ -546,7 +546,10 @@ async function handleThreadReply(
           const tNum = myTasks.findIndex(x => x.id === t.id) + 1;
           return `*Task ${tNum}:* ${t.task_text}`;
         }).join("\n");
-        taskNDoneMsg += `\n\n📋 *Still in progress:*\n${remainingLines}\n\nReply *"Task N done"* when each is complete.`;
+        const donePrompt = remainingAfterN.length === 1
+          ? `Reply *"Task ${myTasks.findIndex(x => x.id === remainingAfterN[0].id) + 1} done"* when it's complete.`
+          : `Reply *"Task ${myTasks.findIndex(x => x.id === remainingAfterN[0].id) + 1} done"*, *"Task ${myTasks.findIndex(x => x.id === remainingAfterN[remainingAfterN.length - 1].id) + 1} done"*, etc. when each is complete.`;
+        taskNDoneMsg += `\n\n📋 *Still in progress:*\n${remainingLines}\n\n${donePrompt}`;
       } else {
         taskNDoneMsg += `\n\nAll tasks complete! Nice one — I've stopped the follow-ups.`;
       }
@@ -618,7 +621,10 @@ async function handleThreadReply(
         const taskNum = allMyTasks.findIndex(x => x.id === t.id) + 1;
         return `*Task ${taskNum}:* ${t.task_text}`;
       }).join("\n");
-      completionMsg += `\n\n📋 *Still in progress:*\n${remainingLines}\n\nReply *"Task N done"* when each is complete.`;
+      const donePrompt2 = remainingActiveTasks.length === 1
+        ? `Reply *"Task ${allMyTasks.findIndex(x => x.id === remainingActiveTasks[0].id) + 1} done"* when it's complete.`
+        : `Reply *"Task ${allMyTasks.findIndex(x => x.id === remainingActiveTasks[0].id) + 1} done"*, *"Task ${allMyTasks.findIndex(x => x.id === remainingActiveTasks[remainingActiveTasks.length - 1].id) + 1} done"*, etc. when each is complete.`;
+      completionMsg += `\n\n📋 *Still in progress:*\n${remainingLines}\n\n${donePrompt2}`;
     } else {
       completionMsg += `\n\nNice one — I've stopped the follow-ups.`;
     }
@@ -873,7 +879,10 @@ async function handleBotMentionInThread(
           const tNum = senderTasks.findIndex(x => x.id === t.id) + 1;
           return `*Task ${tNum}:* ${t.task_text}`;
         }).join("\n");
-        replyMsg += `\n\n📋 *Still in progress:*\n${remainingLines}\n\nReply *"Task N done"* when each is complete.`;
+        const donePrompt3 = remainingActive.length === 1
+          ? `Reply *"Task ${senderTasks.findIndex(x => x.id === remainingActive[0].id) + 1} done"* when it's complete.`
+          : `Reply *"Task ${senderTasks.findIndex(x => x.id === remainingActive[0].id) + 1} done"*, *"Task ${senderTasks.findIndex(x => x.id === remainingActive[remainingActive.length - 1].id) + 1} done"*, etc. when each is complete.`;
+        replyMsg += `\n\n📋 *Still in progress:*\n${remainingLines}\n\n${donePrompt3}`;
       } else {
         replyMsg += `\n\nAll tasks complete! Nice one — I've stopped the follow-ups.`;
       }
