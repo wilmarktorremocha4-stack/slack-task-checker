@@ -396,6 +396,19 @@ async function handleThreadReply(
   const messageText = rawText.toLowerCase().trim();
   const userId = event.user as string;
 
+  // When a message @mentions the bot, Slack fires BOTH an app_mention event
+  // AND a message event. handleBotMentionInThread handles the app_mention, so
+  // we skip here to avoid a double reply.
+  const botUserId2 = await getBotUserId();
+  const botEnvId2 = process.env.SLACK_BOT_USER_ID ?? "";
+  if (
+    (botUserId2 && rawText.includes(`<@${botUserId2}>`)) ||
+    (botEnvId2 && rawText.includes(`<@${botEnvId2}>`))
+  ) {
+    console.log("[reply] message mentions bot — skipping (handled by handleBotMentionInThread)");
+    return;
+  }
+
   console.log("[reply] looking up task for thread_ts:", threadTs, "userId:", userId);
 
   // ── CHECK: Is this a reply to a pending voice task (Brandon clarifying assignee)? ──
