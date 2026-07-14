@@ -913,25 +913,23 @@ async function handleVoiceThreadCommand(
   const threadTs = event.thread_ts as string;
   const senderId = event.user as string;
 
-  await postThreadReply(channelId, threadTs, "🎙️ Got your voice note! Processing...");
-
-  // ── Transcribe ────────────────────────────────────────────────────────────
+  // ── Transcribe (silently — only reply if a real command is recognized) ──────
   const fileUrl = (audioFile.url_private_download as string) || (audioFile.url_private as string);
   const fileName = (audioFile.name as string) || "audio.mp4";
   if (!fileUrl) {
-    await postThreadReply(channelId, threadTs, "⚠️ Couldn't read the audio file. Please try again.");
+    console.error("[voice-thread] no file URL available");
     return;
   }
 
   const audioBuffer = await downloadSlackFile(fileUrl);
   if (!audioBuffer) {
-    await postThreadReply(channelId, threadTs, "⚠️ Failed to download the audio. Please try again.");
+    console.error("[voice-thread] failed to download audio");
     return;
   }
 
   const transcription = await transcribeAudio(audioBuffer, fileName);
   if (!transcription) {
-    await postThreadReply(channelId, threadTs, "⚠️ Couldn't transcribe the audio. Please try again.");
+    console.error("[voice-thread] transcription failed");
     return;
   }
 
@@ -968,15 +966,8 @@ async function handleVoiceThreadCommand(
   });
 
   if (!command || command.intent === "unknown") {
-    await postThreadReply(
-      channelId,
-      threadTs,
-      `I heard: _"${transcription}"_\n\nI'm not sure what you'd like me to do. You can say things like:\n` +
-        `• "cancel this task"\n` +
-        `• "reassign this to [name]"\n` +
-        `• "add [name] to this task"\n` +
-        `• "cancel this and add a new task: [description]"`
-    );
+    // Not a task command — stay completely silent. Brandon is just talking.
+    console.log("[voice-thread] no task intent detected — staying silent. transcription:", transcription.slice(0, 100));
     return;
   }
 
