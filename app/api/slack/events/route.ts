@@ -914,6 +914,20 @@ async function handleBotMentionInThread(
     }
   }
 
+  // No active tasks left but the sender was an assignee saying "done".
+  // This happens when co-assignees share a single task row and one person already
+  // completed it — the second person's "done" would otherwise hit GPT and get
+  // misclassified as cancel_task. Respond gracefully and skip GPT entirely.
+  if (activeThreadTasks.length === 0) {
+    const senderWasAssignee = threadTasks.some(
+      t => t.assigned_to_id === senderId || (t.assignee_ids as string[] | null)?.includes(senderId)
+    );
+    if (senderWasAssignee && /\b(done|completed|finished|complete|all done)\b/i.test(textContent)) {
+      await postThreadReply(channelId, threadTs, `✅ All tasks in this thread are already marked as complete — nothing left to do. Nice work!`);
+      return;
+    }
+  }
+
   console.log("[thread-cmd] parsing command:", humanText.slice(0, 150));
 
   const allActiveTaskTexts = [...new Set(
