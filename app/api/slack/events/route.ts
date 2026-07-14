@@ -337,10 +337,13 @@ async function handleNewTaskMention(
 
   if (mentions.length === 0 || !cleanMessage) {
     console.log("[task] no mentions or empty message — sending help reply");
+    const hasTaskContent = cleanMessage.length > 10;
     await postThreadReply(
       channelId,
       threadTs,
-      "Hey! To assign a task, mention me and tag the person: `@Task Bot @teammate task description here`"
+      hasTaskContent
+        ? "The assignee is not clear to me — please @mention the person directly in this channel so I can create the task."
+        : "Hey! To assign a task, mention me and tag the person: `@Task Bot @teammate task description here`"
     );
     return;
   }
@@ -584,14 +587,23 @@ async function handleThreadReply(
   if (taskNumberMatch && isAssignee) {
     const taskIndex = parseInt(taskNumberMatch[1]) - 1;
     const myTasks = allThreadTasks.filter(
-      (t) => (t.assignee_ids?.includes(userId) || t.assigned_to_id === userId)
+      (t) => (t.assignee_ids?.includes(userId) || t.assigned_to_id === userId) &&
+             t.status !== "cancelled" && t.status !== "escalated"
     );
     const targetTask = myTasks[taskIndex];
-    if (targetTask && targetTask.status === "completed") {
+    if (!targetTask) {
+      await postThreadReply(task.channel_id, task.thread_ts,
+        myTasks.length === 0
+          ? "You don't have any tasks assigned to you in this thread."
+          : `There ${myTasks.length === 1 ? "is" : "are"} only *${myTasks.length} task${myTasks.length === 1 ? "" : "s"}* assigned to you in this thread. Please double-check.`
+      );
+      return;
+    }
+    if (targetTask.status === "completed") {
       await postThreadReply(task.channel_id, task.thread_ts, `✅ *Task ${taskIndex + 1}* is already marked as done:\n> ${targetTask.task_text}`);
       return;
     }
-    if (targetTask && (targetTask.status === "active" || targetTask.status === "revision_requested")) {
+    if (targetTask.status === "active" || targetTask.status === "revision_requested") {
       await supabase.from("tasks").update({ status: "completed", completed_at: new Date().toISOString(), next_followup_at: null }).eq("id", targetTask.id);
 
       const remainingAfterN = myTasks.filter(
@@ -919,11 +931,19 @@ async function handleBotMentionInThread(
            t.status !== "cancelled" && t.status !== "escalated"
     );
     const targetTask = senderTasks[taskIndex];
-    if (targetTask && targetTask.status === "completed") {
+    if (!targetTask) {
+      await postThreadReply(channelId, threadTs,
+        senderTasks.length === 0
+          ? "You don't have any tasks assigned to you in this thread."
+          : `There ${senderTasks.length === 1 ? "is" : "are"} only *${senderTasks.length} task${senderTasks.length === 1 ? "" : "s"}* assigned to you in this thread. Please double-check.`
+      );
+      return;
+    }
+    if (targetTask.status === "completed") {
       await postThreadReply(channelId, threadTs, `✅ *Task ${taskIndex + 1}* is already marked as done:\n> ${targetTask.task_text}`);
       return;
     }
-    if (targetTask && (targetTask.status === "active" || targetTask.status === "revision_requested")) {
+    if (targetTask.status === "active" || targetTask.status === "revision_requested") {
       await supabase.from("tasks").update({
         status: "completed",
         completed_at: new Date().toISOString(),
@@ -968,6 +988,43 @@ async function handleBotMentionInThread(
       await postThreadReply(channelId, threadTs, `✅ All tasks in this thread are already marked as complete — nothing left to do. Nice work!`);
       return;
     }
+  }
+
+  // Intercept "restore/reopen task N" by position number so we use the thread's
+  // task ordering rather than GPT's closedTaskTexts list ordering.
+  const restoreByNumberMatch = textContent.match(/\b(restore|reopen|reactivate|uncancel|bring\s+back)\s+task\s*(\d+)\b/i);
+  if (restoreByNumberMatch) {
+    const taskIndex = parseInt(restoreByNumberMatch[2]) - 1;
+    const allUniqueTexts = [...new Set(threadTasks.map(t => t.task_text as string))];
+    if (taskIndex < 0 || taskIndex >= allUniqueTexts.length) {
+      await postThreadReply(channelId, threadTs,
+        `There ${allUniqueTexts.length === 1 ? "is" : "are"} only *${allUniqueTexts.length} task${allUniqueTexts.length === 1 ? "" : "s"}* in this thread. Please double-check.`
+      );
+      return;
+    }
+    const restoreTargetText = allUniqueTexts[taskIndex];
+    const tasksToRestoreByNum = threadTasks.filter(t =>
+      (t.task_text as string) === restoreTargetText &&
+      (t.status === "cancelled" || t.status === "completed")
+    );
+    if (tasksToRestoreByNum.length === 0) {
+      await postThreadReply(channelId, threadTs, `Task ${taskIndex + 1} is already active — nothing to restore.`);
+      return;
+    }
+    const nextFollowupAtRestore = calculateNextFollowupAt(0, new Date(), process.env.TEAM_TIMEZONE ?? "UTC");
+    await supabase.from("tasks").update({
+      status: "active",
+      completed_at: null,
+      next_followup_at: nextFollowupAtRestore?.toISOString() ?? null,
+      followup_count: 0,
+    }).in("id", tasksToRestoreByNum.map(t => t.id as string));
+    const restoreMentions = [...new Set(tasksToRestoreByNum.map(t => t.assigned_to_id as string))]
+      .map(id => `<@${id}>`).join(", ");
+    await postThreadReply(channelId, threadTs,
+      `🔁 Task ${taskIndex + 1} reopened and follow-ups restarted.\n\n*Assigned to:* ${restoreMentions}\n\n${formatTaskBody(restoreTargetText)}\n\n${restoreMentions} — please reply *"done"* when complete.`
+    );
+    console.log("[thread-cmd] restore-by-number: task", taskIndex + 1, "—", restoreTargetText.slice(0, 60));
+    return;
   }
 
   console.log("[thread-cmd] parsing command:", humanText.slice(0, 150));
@@ -1050,34 +1107,39 @@ async function handleBotMentionInThread(
       return;
     }
 
-    const inserts = newMembers.map((member) => ({
-      task_text: existingTaskText,
-      raw_message: rawText,
-      assigned_to_id: member.id,
-      assigned_to_name: member.name,
-      assignee_ids: [member.id],
-      assignee_names: [member.name],
-      assigned_by_id: senderId,
-      assigned_by_name: senderName,
-      channel_id: channelId,
-      message_ts: event.ts as string,
-      thread_ts: threadTs,
-      status: "active",
-      followup_count: 0,
-      max_followups: 5,
-      next_followup_at: nextFollowupAt?.toISOString() ?? null,
-      assignee_timezone: process.env.TEAM_TIMEZONE ?? "UTC",
-    }));
+    const uniqueAddTaskTexts = [...new Set(activeThreadTasks.map((t) => t.task_text as string))];
+    const inserts = newMembers.flatMap((member) =>
+      uniqueAddTaskTexts.map((taskText) => ({
+        task_text: taskText,
+        raw_message: rawText,
+        assigned_to_id: member.id,
+        assigned_to_name: member.name,
+        assignee_ids: [member.id],
+        assignee_names: [member.name],
+        assigned_by_id: senderId,
+        assigned_by_name: senderName,
+        channel_id: channelId,
+        message_ts: event.ts as string,
+        thread_ts: threadTs,
+        status: "active",
+        followup_count: 0,
+        max_followups: 5,
+        next_followup_at: nextFollowupAt?.toISOString() ?? null,
+        assignee_timezone: process.env.TEAM_TIMEZONE ?? "UTC",
+      }))
+    );
 
     await supabase.from("tasks").insert(inserts);
 
     const addedMentions = newMembers.map((m) => `<@${m.id}>`).join(", ");
+    const addedTaskCount = uniqueAddTaskTexts.length;
+    const addedTaskWord = addedTaskCount === 1 ? "task" : `${addedTaskCount} tasks`;
     await postThreadReply(
       channelId,
       threadTs,
-      `✅ Added ${addedMentions} to this task.\n\n${addedMentions} — please reply *"done"* in this thread when complete. Use this thread for any questions.`
+      `✅ Added ${addedMentions} to ${addedTaskWord} in this thread.\n\n${addedMentions} — please reply *"done"* or *"Task N done"* in this thread when each task is complete. Use this thread for any questions.`
     );
-    console.log("[thread-cmd] add_assignee:", newMembers.map((m) => m.name).join(", "));
+    console.log("[thread-cmd] add_assignee:", newMembers.map((m) => m.name).join(", "), "tasks:", addedTaskCount);
     return;
   }
 
@@ -1543,27 +1605,32 @@ async function handleVoiceThreadCommand(
       await postThreadReply(channelId, threadTs, `${toAdd.map((m) => `<@${m.id}>`).join(", ")} ${toAdd.length === 1 ? "is" : "are"} already assigned to this task.`);
       return;
     }
-    await supabase.from("tasks").insert(newMembers.map((member) => ({
-      task_text: existingTaskText,
-      raw_message: transcription,
-      voice_transcription: transcription,
-      assigned_to_id: member.id,
-      assigned_to_name: member.name,
-      assignee_ids: [member.id],
-      assignee_names: [member.name],
-      assigned_by_id: senderId,
-      assigned_by_name: senderName,
-      channel_id: channelId,
-      message_ts: event.ts as string,
-      thread_ts: threadTs,
-      status: "active",
-      followup_count: 0,
-      max_followups: 5,
-      next_followup_at: nextFollowupAt?.toISOString() ?? null,
-      assignee_timezone: process.env.TEAM_TIMEZONE ?? "UTC",
-    })));
+    const voiceAddUniqueTexts = [...new Set(activeThreadTasks.map((t) => t.task_text as string))];
+    await supabase.from("tasks").insert(newMembers.flatMap((member) =>
+      voiceAddUniqueTexts.map((taskText) => ({
+        task_text: taskText,
+        raw_message: transcription,
+        voice_transcription: transcription,
+        assigned_to_id: member.id,
+        assigned_to_name: member.name,
+        assignee_ids: [member.id],
+        assignee_names: [member.name],
+        assigned_by_id: senderId,
+        assigned_by_name: senderName,
+        channel_id: channelId,
+        message_ts: event.ts as string,
+        thread_ts: threadTs,
+        status: "active",
+        followup_count: 0,
+        max_followups: 5,
+        next_followup_at: nextFollowupAt?.toISOString() ?? null,
+        assignee_timezone: process.env.TEAM_TIMEZONE ?? "UTC",
+      }))
+    ));
     const addedMentions = newMembers.map((m) => `<@${m.id}>`).join(", ");
-    await postThreadReply(channelId, threadTs, `✅ Added ${addedMentions} to this task.\n\n${addedMentions} — please reply *"done"* in this thread when complete.`);
+    const voiceAddedCount = voiceAddUniqueTexts.length;
+    const voiceAddedWord = voiceAddedCount === 1 ? "task" : `${voiceAddedCount} tasks`;
+    await postThreadReply(channelId, threadTs, `✅ Added ${addedMentions} to ${voiceAddedWord} in this thread.\n\n${addedMentions} — please reply *"done"* or *"Task N done"* in this thread when each task is complete.`);
     return;
   }
 
@@ -1865,7 +1932,7 @@ async function handleVoiceMessage(
     await postThreadReply(
       channelId,
       threadTs,
-      `📝 Here's what I heard:\n\n_"${transcription}"_\n\nI couldn't identify a clear task here. Could you clarify what needs to be done and who should do it?`
+      `📝 Here's what I heard:\n\n_"${transcription}"_\n\nThe assignee is not clear to me — please @mention the person directly in a reply so I can create the task.`
     );
     return;
   }
