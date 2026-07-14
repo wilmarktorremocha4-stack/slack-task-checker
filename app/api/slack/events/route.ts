@@ -78,6 +78,17 @@ async function processSlackEvent(event: Record<string, unknown>) {
   // Only process events from the monitored channel
   if (event.channel !== monitoredChannelId) return;
 
+  // Handle message deletions FIRST — deletion events may carry bot_id metadata
+  // that would cause them to be dropped by the guard below.
+  if (event.subtype === "message_deleted") {
+    const deletedTs = (event.deleted_ts as string) ?? (event.previous_message as Record<string, unknown>)?.ts as string;
+    const channelId = event.channel as string;
+    if (deletedTs) {
+      await handleMessageDeleted(deletedTs, channelId, supabase);
+    }
+    return;
+  }
+
   // Ignore bot messages and automated system messages.
   // Check both bot_id (API bots) and app_id (Slack apps), and also check
   // if the sender user ID matches our own bot — some Slack configurations
@@ -91,17 +102,6 @@ async function processSlackEvent(event: Record<string, unknown>) {
   const senderId = (event.user as string) ?? "";
   if (senderId && (senderId === botUserId || senderId === botEnvId)) {
     console.log("[slack] ignoring message from bot's own user ID");
-    return;
-  }
-
-  // Handle message deletions: cancel any task tied to the deleted message.
-  // Do this BEFORE the generic subtype guard since message_deleted is a subtype.
-  if (event.subtype === "message_deleted") {
-    const deletedTs = (event.deleted_ts as string) ?? (event.previous_message as Record<string, unknown>)?.ts as string;
-    const channelId = event.channel as string;
-    if (deletedTs) {
-      await handleMessageDeleted(deletedTs, channelId, supabase);
-    }
     return;
   }
 
@@ -472,19 +472,20 @@ async function handleThreadReply(
     }
   }
 
-  // Match the task for this thread regardless of status
-  const { data: task } = await supabase
+  // Fetch all tasks in this thread
+  const { data: allThreadTasks } = await supabase
     .from("tasks")
     .select("*")
     .eq("thread_ts", threadTs)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .order("created_at", { ascending: true });
 
-  if (!task) {
+  if (!allThreadTasks || allThreadTasks.length === 0) {
     console.log("[reply] no task found for this thread");
     return;
   }
+
+  // Use the most recent task as the primary task for metadata/logging
+  const task = allThreadTasks[allThreadTasks.length - 1];
 
   const assigneeIds: string[] = task.assignee_ids?.length ? task.assignee_ids : [task.assigned_to_id];
   const isAssignee = assigneeIds.includes(userId);
@@ -506,6 +507,29 @@ async function handleThreadReply(
     return;
   }
 
+  // Handle "Task N done" replies for multi-task threads
+  const taskNumberMatch = rawText.match(/task\s*(\d+)\s*(is\s*)?(done|complete|finished)/i);
+  if (taskNumberMatch && isAssignee) {
+    const taskIndex = parseInt(taskNumberMatch[1]) - 1;
+    const myTasks = allThreadTasks.filter(
+      (t) => (t.assignee_ids?.includes(userId) || t.assigned_to_id === userId)
+    );
+    const targetTask = myTasks[taskIndex];
+    if (targetTask && (targetTask.status === "active" || targetTask.status === "revision_requested")) {
+      await supabase.from("tasks").update({ status: "completed", completed_at: new Date().toISOString(), next_followup_at: null }).eq("id", targetTask.id);
+      await postThreadReply(
+        targetTask.channel_id,
+        targetTask.thread_ts,
+        `🎉 Got it ${targetTask.assigned_to_name}! *Task ${taskIndex + 1}* marked as done:\n> ${targetTask.task_text}\n\nI've stopped follow-ups for this one.`
+      );
+      await sendDirectMessage(
+        process.env.SLACK_BRANDON_USER_ID!,
+        `✅ *Task Completed*\n\n*Assignee:* ${targetTask.assigned_to_name}\n*Task:* ${targetTask.task_text}`
+      );
+      return;
+    }
+  }
+
   // Only assignees can mark a task done; non-assignees (Brandon, others) are always just conversation
   const mightBeDone =
     isAssignee &&
@@ -520,6 +544,25 @@ async function handleThreadReply(
     : false;
 
   if (isDoneMessage) {
+    // Check how many active tasks this user has in this thread
+    const myActiveTasks = allThreadTasks.filter(
+      (t) => (t.assignee_ids?.includes(userId) || t.assigned_to_id === userId) &&
+              (t.status === "active" || t.status === "revision_requested")
+    );
+
+    if (myActiveTasks.length > 1) {
+      // Multiple active tasks — ask which one is done
+      const taskList = myActiveTasks.map((t, i) => `*Task ${i + 1}:* ${t.task_text}`).join("\n");
+      await postThreadReply(
+        task.channel_id,
+        task.thread_ts,
+        `Great work <@${userId}>! Which task are you marking as done?\n\n${taskList}\n\nReply with *"Task 1 done"*, *"Task 2 done"*, etc.`
+      );
+      return;
+    }
+
+    // Single active task — mark it done
+    const taskToComplete = myActiveTasks[0] ?? task;
     await supabase
       .from("tasks")
       .update({
@@ -527,27 +570,27 @@ async function handleThreadReply(
         completed_at: new Date().toISOString(),
         next_followup_at: null,
       })
-      .eq("id", task.id);
+      .eq("id", taskToComplete.id);
 
     await postThreadReply(
-      task.channel_id,
-      task.thread_ts,
-      `🎉 Great work ${task.assigned_to_name}! Task marked as *done*:\n> ${task.task_text}\n\nNice one — I've stopped the follow-ups.`
+      taskToComplete.channel_id,
+      taskToComplete.thread_ts,
+      `🎉 Great work ${taskToComplete.assigned_to_name}! Task marked as *done*:\n> ${taskToComplete.task_text}\n\nNice one — I've stopped the follow-ups.`
     );
 
     await supabase.from("task_comments").insert([
       {
-        task_id: task.id,
+        task_id: taskToComplete.id,
         author_type: "assignee",
-        author_name: task.assigned_to_name,
+        author_name: taskToComplete.assigned_to_name,
         content: rawText,
         sent_to_slack: false,
       },
       {
-        task_id: task.id,
+        task_id: taskToComplete.id,
         author_type: "system",
         author_name: "System",
-        content: `${task.assigned_to_name} marked this task as done.`,
+        content: `${taskToComplete.assigned_to_name} marked this task as done.`,
         sent_to_slack: true,
       },
     ]);
@@ -555,10 +598,26 @@ async function handleThreadReply(
     const brandonUserId = process.env.SLACK_BRANDON_USER_ID!;
     await sendDirectMessage(
       brandonUserId,
-      `✅ *Task Completed*\n\n*Assignee:* ${task.assigned_to_name}\n*Task:* ${task.task_text}\n\nThis task has been marked as done.`
+      `✅ *Task Completed*\n\n*Assignee:* ${taskToComplete.assigned_to_name}\n*Task:* ${taskToComplete.task_text}\n\nThis task has been marked as done.`
     );
 
-    console.log("[reply] task marked completed:", task.id);
+    console.log("[reply] task marked completed:", taskToComplete.id);
+    return;
+  }
+
+  // Non-assignee saying "done" — gently redirect them
+  const nonAssigneeMightBeDone =
+    !isAssignee &&
+    /\b(done|completed|finished|complete)\b/i.test(rawText);
+  if (nonAssigneeMightBeDone) {
+    const assigneeNames = (task.assignee_names?.length
+      ? task.assignee_names
+      : [task.assigned_to_name]) as string[];
+    await postThreadReply(
+      task.channel_id,
+      task.thread_ts,
+      `Hey <@${userId}>, you're not assigned to this task — only ${assigneeNames.map(n => `*${n}*`).join(" and ")} can mark it as done. You might be in the wrong thread!`
+    );
     return;
   }
 
@@ -626,14 +685,49 @@ async function handleBotMentionInThread(
 
   // Casual acknowledgments — person is just saying "got it", "thanks", etc.
   // Stay completely silent. No need to respond.
+  // Strip @mentions and bare team member names from the text to reveal the core message
+  const strippedForAck = rawText
+    .replace(/<@[A-Z0-9]+>/g, "")
+    .replace(new RegExp(`\\b(${teamMembers.map(m => m.name.split(" ")[0]).join("|")})\\b`, "gi"), "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase()
+    .replace(/[.,!?]+$/, "");
+
+  const ACK_PHRASES = /^(got it|thanks|thank you|ok|okay|noted|understood|will do|on it|sure|sounds good|perfect|great|alright|roger|copy that|no problem|np|cool|nice|awesome|received|ack|k|kk|yep|yup|yes|got|noted thanks|and|thanks and|got it thanks|got it thank you|and thank you|and thanks)$/i;
+
   const isAcknowledgment =
-    textContent.length === 0 ||
-    /^(got it|got it!|thanks|thank you|ok|okay|noted|understood|will do|on it|sure|sounds good|perfect|great|👍|🙏|alright|roger|copy that|no problem|np|cool|nice|awesome|perfect|received|ack|k|kk|yep|yup|yes|got|noted thanks)[.!,]?$/i.test(
-      textContent
-    );
+    strippedForAck.length === 0 ||
+    ACK_PHRASES.test(strippedForAck) ||
+    /^(👍|🙏|✅|👌)$/.test(strippedForAck);
 
   if (isAcknowledgment) {
     console.log("[thread-cmd] casual acknowledgment from", senderId, "— staying silent");
+    return;
+  }
+
+  // Task summary request — answer directly without calling GPT
+  const isSummaryRequest = /\b(what (are|is)|list|show|summary|status of).*task|task.*(list|status|summary|what)/i.test(textContent);
+  if (isSummaryRequest) {
+    const allThreadTasks = await supabase
+      .from("tasks")
+      .select("*")
+      .eq("thread_ts", threadTs)
+      .order("created_at", { ascending: true });
+
+    const tasks = allThreadTasks.data ?? [];
+    if (tasks.length === 0) {
+      await postThreadReply(channelId, threadTs, "No tasks found in this thread.");
+      return;
+    }
+
+    const lines = tasks.map((t, i) => {
+      const icon = t.status === "completed" ? "✅" : t.status === "cancelled" ? "🗑️" : "🔵";
+      const assignee = `<@${t.assigned_to_id}>`;
+      const status = t.status === "completed" ? "Done" : t.status === "cancelled" ? "Cancelled" : `Active · ${t.followup_count}/5 follow-ups sent`;
+      return `${icon} *Task ${i + 1}:* ${t.task_text}\n   *Assigned to:* ${assignee} · *Status:* ${status}`;
+    });
+    await postThreadReply(channelId, threadTs, `📋 *Tasks in this thread:*\n\n${lines.join("\n\n")}`);
     return;
   }
 
@@ -768,31 +862,38 @@ async function handleBotMentionInThread(
       return;
     }
 
-    // Cancel all existing tasks in thread
-    const existingIds = threadTasks.map((t) => t.id as string);
-    await supabase.from("tasks").update({ status: "cancelled" }).in("id", existingIds);
+    const alreadyAssignedIds = new Set(threadTasks.map((t) => t.assigned_to_id as string));
+    const toAddIds = new Set(toAdd.map((m) => m.id));
 
-    // Create new tasks for new assignees
-    const inserts = toAdd.map((member) => ({
-      task_text: existingTaskText,
-      raw_message: rawText,
-      assigned_to_id: member.id,
-      assigned_to_name: member.name,
-      assignee_ids: [member.id],
-      assignee_names: [member.name],
-      assigned_by_id: senderId,
-      assigned_by_name: senderName,
-      channel_id: channelId,
-      message_ts: event.ts as string,
-      thread_ts: threadTs,
-      status: "active",
-      followup_count: 0,
-      max_followups: 5,
-      next_followup_at: nextFollowupAt?.toISOString() ?? null,
-      assignee_timezone: process.env.TEAM_TIMEZONE ?? "UTC",
-    }));
+    // Cancel tasks for people NOT in the new assignee list
+    const tasksToCancel = threadTasks.filter((t) => !toAddIds.has(t.assigned_to_id as string));
+    if (tasksToCancel.length > 0) {
+      await supabase.from("tasks").update({ status: "cancelled", next_followup_at: null }).in("id", tasksToCancel.map((t) => t.id as string));
+    }
 
-    await supabase.from("tasks").insert(inserts);
+    // Only create new tasks for people NOT already assigned
+    const newMembers = toAdd.filter((m) => !alreadyAssignedIds.has(m.id));
+    if (newMembers.length > 0) {
+      const inserts = newMembers.map((member) => ({
+        task_text: existingTaskText,
+        raw_message: rawText,
+        assigned_to_id: member.id,
+        assigned_to_name: member.name,
+        assignee_ids: [member.id],
+        assignee_names: [member.name],
+        assigned_by_id: senderId,
+        assigned_by_name: senderName,
+        channel_id: channelId,
+        message_ts: event.ts as string,
+        thread_ts: threadTs,
+        status: "active",
+        followup_count: 0,
+        max_followups: 5,
+        next_followup_at: nextFollowupAt?.toISOString() ?? null,
+        assignee_timezone: process.env.TEAM_TIMEZONE ?? "UTC",
+      }));
+      await supabase.from("tasks").insert(inserts);
+    }
 
     const newMentions = toAdd.map((m) => `<@${m.id}>`).join(", ");
     await postThreadReply(
@@ -831,6 +932,13 @@ async function handleBotMentionInThread(
       if (!assignees.find((a) => a.id === m.id)) assignees.push(m);
     }
 
+    if (assignees.length === 0) {
+      // Default to current thread assignees rather than asking
+      assignees = [...new Set(threadTasks.map((t) => t.assigned_to_id as string))].map((id) => {
+        const t = threadTasks.find((x) => x.assigned_to_id === id)!;
+        return { id, name: t.assigned_to_name as string };
+      });
+    }
     if (assignees.length === 0) {
       await postThreadReply(channelId, threadTs, "Who should this new task be assigned to? Please @mention them.");
       return;
