@@ -487,9 +487,12 @@ async function handleThreadReply(
   // Use the most recent task as the primary task for metadata/logging
   const task = allThreadTasks[allThreadTasks.length - 1];
 
-  const assigneeIds: string[] = task.assignee_ids?.length ? task.assignee_ids : [task.assigned_to_id];
-  const isAssignee = assigneeIds.includes(userId);
-  const isOpen = task.status === "active" || task.status === "revision_requested";
+  // Check across ALL thread rows so multi-assignee tasks work correctly
+  const isAssignee = allThreadTasks.some(
+    t => (t.assigned_to_id === userId || t.assignee_ids?.includes(userId)) &&
+         (t.status === "active" || t.status === "revision_requested")
+  );
+  const isOpen = allThreadTasks.some(t => t.status === "active" || t.status === "revision_requested");
 
   // Closed tasks: just log the reply for dashboard visibility
   if (!isOpen) {
@@ -610,13 +613,15 @@ async function handleThreadReply(
     !isAssignee &&
     /\b(done|completed|finished|complete)\b/i.test(rawText);
   if (nonAssigneeMightBeDone) {
-    const assigneeNames = (task.assignee_names?.length
-      ? task.assignee_names
-      : [task.assigned_to_name]) as string[];
+    const allActiveAssigneeNames = [...new Set(
+      allThreadTasks
+        .filter(t => t.status === "active" || t.status === "revision_requested")
+        .map(t => t.assigned_to_name as string)
+    )];
     await postThreadReply(
       task.channel_id,
       task.thread_ts,
-      `Hey <@${userId}>, you're not assigned to this task — only ${assigneeNames.map(n => `*${n}*`).join(" and ")} can mark it as done. You might be in the wrong thread!`
+      `Hey <@${userId}>, you're not assigned to this task — only ${allActiveAssigneeNames.map(n => `*${n}*`).join(" and ")} can mark it as done. You might be in the wrong thread!`
     );
     return;
   }
@@ -715,7 +720,9 @@ async function handleBotMentionInThread(
   }
 
   // Task summary request — answer directly without calling GPT
-  const isSummaryRequest = /\b(what (are|is)|list|show|summary|status of).*task|task.*(list|status|summary|what)/i.test(textContent);
+  const isSummaryRequest =
+    /\b(what (are|is)|list|show|summary|status of).*task|task.*(list|status|summary|what)/i.test(textContent) ||
+    /\b(any\s+)?summar(y|ize|ies)\b/i.test(textContent);
   if (isSummaryRequest) {
     const allThreadTasks = await supabase
       .from("tasks")
@@ -729,11 +736,23 @@ async function handleBotMentionInThread(
       return;
     }
 
-    const lines = tasks.map((t, i) => {
-      const icon = t.status === "completed" ? "✅" : t.status === "cancelled" ? "🗑️" : "🔵";
-      const assignee = `<@${t.assigned_to_id}>`;
-      const status = t.status === "completed" ? "Done" : t.status === "cancelled" ? "Cancelled" : `Active · ${t.followup_count}/5 follow-ups sent`;
-      return `${icon} *Task ${i + 1}:* ${t.task_text}\n   *Assigned to:* ${assignee} · *Status:* ${status}`;
+    // Group rows by task_text so same task assigned to multiple people shows as one entry
+    const groupMap = new Map<string, typeof tasks>();
+    for (const t of tasks) {
+      const key = t.task_text as string;
+      if (!groupMap.has(key)) groupMap.set(key, []);
+      groupMap.get(key)!.push(t);
+    }
+
+    const lines = [...groupMap.entries()].map(([taskText, group], i) => {
+      const allDone = group.every(t => t.status === "completed");
+      const allCancelled = group.every(t => t.status === "cancelled");
+      const icon = allDone ? "✅" : allCancelled ? "🗑️" : "🔵";
+      const perAssignee = group.map(t => {
+        const s = t.status === "completed" ? "Done ✅" : t.status === "cancelled" ? "Cancelled 🗑️" : `Active · ${t.followup_count}/5 follow-ups sent`;
+        return `<@${t.assigned_to_id}>: ${s}`;
+      }).join("\n      ");
+      return `${icon} *Task ${i + 1}:* ${taskText}\n      ${perAssignee}`;
     });
     await postThreadReply(channelId, threadTs, `📋 *Tasks in this thread:*\n\n${lines.join("\n\n")}`);
     return;
