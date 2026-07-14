@@ -187,7 +187,11 @@ async function saveBotMessageTs(
   messageTs: string | null
 ) {
   if (!messageTs) return;
-  await supabase.from("bot_messages").insert({ channel_id: channelId, thread_ts: threadTs, message_ts: messageTs }).catch(() => {});
+  try {
+    await supabase.from("bot_messages").insert({ channel_id: channelId, thread_ts: threadTs, message_ts: messageTs });
+  } catch {
+    // Non-critical — deletion cleanup falls back to conversations.replies
+  }
 }
 
 // Format task text for Slack messages.
