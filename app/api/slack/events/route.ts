@@ -1037,13 +1037,13 @@ async function handleBotMentionInThread(
     if (!newText) {
       await postThreadReply(channelId, threadTs, "I cancelled the old task but couldn't figure out the new one. What should the new task be?");
       // Cancel anyway
-      const existingIds = threadTasks.map((t) => t.id as string);
+      const existingIds = activeThreadTasks.map((t) => t.id as string);
       await supabase.from("tasks").update({ status: "cancelled", next_followup_at: null }).in("id", existingIds);
       return;
     }
 
     // Cancel existing tasks
-    const existingIds = threadTasks.map((t) => t.id as string);
+    const existingIds = activeThreadTasks.map((t) => t.id as string);
     await supabase.from("tasks").update({ status: "cancelled", next_followup_at: null }).in("id", existingIds);
 
     // Determine assignees, honouring thread history:
@@ -1051,8 +1051,8 @@ async function handleBotMentionInThread(
     // - explicit new names only ("replace with @Harry") → only Harry
     // - no names mentioned → keep existing unchanged
     const namedAssignees = resolveMembers(command.addNames, mentionedIds);
-    const existingAssignees = [...new Set(threadTasks.map((t) => t.assigned_to_id as string))].map((id) => {
-      const t = threadTasks.find((x) => x.assigned_to_id === id)!;
+    const existingAssignees = [...new Set(activeThreadTasks.map((t) => t.assigned_to_id as string))].map((id) => {
+      const t = activeThreadTasks.find((x) => x.assigned_to_id === id)!;
       return { id, name: t.assigned_to_name as string };
     });
 
@@ -1190,7 +1190,6 @@ async function handleVoiceThreadCommand(
     .from("tasks")
     .select("*")
     .eq("thread_ts", threadTs)
-    .not("status", "in", '("cancelled","escalated")')
     .order("created_at", { ascending: true });
 
   const teamMembers = await getWorkspaceMembers();
@@ -1202,9 +1201,11 @@ async function handleVoiceThreadCommand(
     return;
   }
 
-  const existingTaskText = threadTasks[0].task_text as string;
+  const activeThreadTasks = threadTasks.filter((t) => t.status !== "cancelled" && t.status !== "escalated");
+  const contextTasks = activeThreadTasks.length > 0 ? activeThreadTasks : threadTasks;
+  const existingTaskText = contextTasks[contextTasks.length - 1].task_text as string;
   const existingAssigneeNames: string[] = [
-    ...new Set(threadTasks.flatMap((t) => (t.assignee_names?.length ? t.assignee_names : [t.assigned_to_name]) as string[])),
+    ...new Set(contextTasks.flatMap((t) => (t.assignee_names?.length ? t.assignee_names : [t.assigned_to_name]) as string[])),
   ];
 
   // ── Parse the transcription as a thread command ───────────────────────────
@@ -1252,7 +1253,7 @@ async function handleVoiceThreadCommand(
       await postThreadReply(channelId, threadTs, "I couldn't figure out who to add from the voice note. Please @mention them in a text reply.");
       return;
     }
-    const alreadyIds = new Set(threadTasks.map((t) => t.assigned_to_id as string));
+    const alreadyIds = new Set(activeThreadTasks.map((t) => t.assigned_to_id as string));
     const newMembers = toAdd.filter((m) => !alreadyIds.has(m.id));
     if (newMembers.length === 0) {
       await postThreadReply(channelId, threadTs, `${toAdd.map((m) => `<@${m.id}>`).join(", ")} ${toAdd.length === 1 ? "is" : "are"} already assigned to this task.`);
@@ -1306,11 +1307,11 @@ async function handleVoiceThreadCommand(
       return;
     }
 
-    const alreadyAssignedIds = new Set(threadTasks.map((t) => t.assigned_to_id as string));
+    const alreadyAssignedIds = new Set(activeThreadTasks.map((t) => t.assigned_to_id as string));
     const toAddIds = new Set(toAdd.map((m) => m.id));
 
     // Cancel tasks for people NOT in the new assignee list
-    const tasksToCancel = threadTasks.filter((t) => !toAddIds.has(t.assigned_to_id as string));
+    const tasksToCancel = activeThreadTasks.filter((t) => !toAddIds.has(t.assigned_to_id as string));
     if (tasksToCancel.length > 0) {
       await supabase.from("tasks").update({ status: "cancelled", next_followup_at: null }).in("id", tasksToCancel.map((t) => t.id as string));
     }
@@ -1353,8 +1354,8 @@ async function handleVoiceThreadCommand(
     }
     let assignees: Array<{ id: string; name: string }> = [];
     if (command.keepExistingAssignees) {
-      assignees = [...new Set(threadTasks.map((t) => t.assigned_to_id as string))].map((id) => {
-        const t = threadTasks.find((x) => x.assigned_to_id === id)!;
+      assignees = [...new Set(activeThreadTasks.map((t) => t.assigned_to_id as string))].map((id) => {
+        const t = activeThreadTasks.find((x) => x.assigned_to_id === id)!;
         return { id, name: t.assigned_to_name as string };
       });
     }
@@ -1363,8 +1364,8 @@ async function handleVoiceThreadCommand(
     }
     if (assignees.length === 0) {
       // Default to current thread assignees rather than asking
-      assignees = [...new Set(threadTasks.map((t) => t.assigned_to_id as string))].map((id) => {
-        const t = threadTasks.find((x) => x.assigned_to_id === id)!;
+      assignees = [...new Set(activeThreadTasks.map((t) => t.assigned_to_id as string))].map((id) => {
+        const t = activeThreadTasks.find((x) => x.assigned_to_id === id)!;
         return { id, name: t.assigned_to_name as string };
       });
     }
@@ -1432,7 +1433,7 @@ async function handleVoiceThreadCommand(
 
   // ── CANCEL TASK ───────────────────────────────────────────────────────────
   if (command.intent === "cancel_task") {
-    await supabase.from("tasks").update({ status: "cancelled", next_followup_at: null }).in("id", threadTasks.map((t) => t.id as string));
+    await supabase.from("tasks").update({ status: "cancelled", next_followup_at: null }).in("id", activeThreadTasks.map((t) => t.id as string));
     await postThreadReply(channelId, threadTs, `🗑️ Got it — task cancelled. No further follow-ups will be sent.`);
     return;
   }
@@ -1440,7 +1441,7 @@ async function handleVoiceThreadCommand(
   // ── CANCEL AND REPLACE ────────────────────────────────────────────────────
   if (command.intent === "cancel_and_replace") {
     const newText = command.newTaskText?.trim();
-    await supabase.from("tasks").update({ status: "cancelled", next_followup_at: null }).in("id", threadTasks.map((t) => t.id as string));
+    await supabase.from("tasks").update({ status: "cancelled", next_followup_at: null }).in("id", activeThreadTasks.map((t) => t.id as string));
     if (!newText) {
       await postThreadReply(channelId, threadTs, "I cancelled the old task but couldn't catch the new one. What should the new task be?");
       return;
