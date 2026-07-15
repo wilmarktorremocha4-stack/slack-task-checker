@@ -337,6 +337,17 @@ async function handleNewTaskMention(
 
   if (mentions.length === 0 || !cleanMessage) {
     console.log("[task] no mentions or empty message — sending help reply");
+    // If the message looks like a completion attempt ("done", "finished", etc.)
+    // the user is likely saying "done" in the wrong place (main channel instead of thread).
+    const mightBeCompletion = /^(done|finished|complete|completed|all done)[!.]?$/i.test(cleanMessage.trim());
+    if (mightBeCompletion) {
+      await postThreadReply(
+        channelId,
+        threadTs,
+        `To mark a task as done, please reply *"done"* inside the task's Slack thread — not here in the main channel.\n\nFind the original task message and click *"Reply"* to open the thread, then type your reply there.`
+      );
+      return;
+    }
     const hasTaskContent = cleanMessage.length > 10;
     await postThreadReply(
       channelId,
@@ -1098,6 +1109,62 @@ async function handleBotMentionInThread(
     );
     console.log("[thread-cmd] remove-from-task-num: task", taskIndex + 1, "—", tasksToCancel.length, "row(s) cancelled");
     return;
+  }
+
+  // ── COMPLETION VIA BOT MENTION ───────────────────────────────────────────
+  // Assignee said "@taskbot done" — handle completion before GPT command parsing.
+  // This covers the case where someone @mentions the bot while saying "done",
+  // which otherwise falls into parseThreadCommand (a management-command parser)
+  // and gets classified as "unknown" or misclassified.
+  const senderActiveTasks = activeThreadTasks.filter(
+    t => t.assigned_to_id === senderId || (t.assignee_ids as string[] | null)?.includes(senderId)
+  );
+  if (
+    senderActiveTasks.length > 0 &&
+    /\b(done|completed|finished|complete|all done|sorted|submitted|sent|delivered|wrapped up|good to go|ready|all set|handled|accomplished)\b/i.test(textContent)
+  ) {
+    const isDoneViaBotMention = await classifyCompletionIntent(rawText, senderActiveTasks[0].task_text as string);
+    if (isDoneViaBotMention) {
+      if (senderActiveTasks.length > 1) {
+        const taskList = senderActiveTasks.map((t, i) => `*Task ${i + 1}:* ${t.task_text}`).join("\n");
+        await postThreadReply(channelId, threadTs,
+          `Great work <@${senderId}>! Which task are you marking as done?\n\n${taskList}\n\nReply with *"Task 1 done"*, *"Task 2 done"*, etc.`
+        );
+        return;
+      }
+      const taskToComplete = senderActiveTasks[0];
+      await supabase.from("tasks").update({
+        status: "completed",
+        completed_at: new Date().toISOString(),
+        next_followup_at: null,
+      }).eq("id", taskToComplete.id as string);
+
+      await postThreadReply(channelId, threadTs,
+        `🎉 Great work ${taskToComplete.assigned_to_name}! Task marked as *done*:\n> ${taskToComplete.task_text}\n\nNice one — I've stopped the follow-ups.`
+      );
+      await supabase.from("task_comments").insert([
+        {
+          task_id: taskToComplete.id,
+          author_type: "assignee",
+          author_name: taskToComplete.assigned_to_name,
+          content: rawText,
+          sent_to_slack: false,
+        },
+        {
+          task_id: taskToComplete.id,
+          author_type: "system",
+          author_name: "System",
+          content: `${taskToComplete.assigned_to_name} marked this task as done.`,
+          sent_to_slack: true,
+        },
+      ]);
+      await sendDirectMessage(
+        brandonUserId,
+        `✅ *Task Completed*\n\n*Assignee:* ${taskToComplete.assigned_to_name}\n*Task:* ${taskToComplete.task_text}\n\nThis task has been marked as done.`
+      );
+      console.log("[thread-cmd] completion via bot mention:", taskToComplete.id);
+      return;
+    }
   }
 
   console.log("[thread-cmd] parsing command:", humanText.slice(0, 150));
