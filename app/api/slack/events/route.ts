@@ -410,13 +410,23 @@ async function handleNewTaskMention(
     console.error("[task] step 5 failed — parseTaskFromMessage error:", err);
   }
 
-  // If GPT couldn't parse or returned no task text, fall back to the raw clean message.
-  // Brandon tagged someone and wrote text — that is always a task assignment.
-  const taskText = parsed?.taskText?.trim() || cleanMessage.trim();
+  // Resolve the final task text:
+  // 1. Trust GPT's taskText when it provides one.
+  // 2. Fall back to cleanMessage ONLY when GPT returned nothing but the message
+  //    is clearly action-oriented (not a greeting, compliment, or social comment).
+  const gptTaskText = parsed?.taskText?.trim();
+
+  const NON_TASK_PATTERN = /^(hi|hello|hey|sup|yo|howdy|how are you|how'?s it going|what'?s up|thanks|thank you|ok|okay|bye|good job|nice|great|cool|awesome|nice work|well done|congrats|congratulations)[.!?,]?$/i;
+  const isLikelySocial = NON_TASK_PATTERN.test(cleanMessage.trim()) || cleanMessage.trim().split(/\s+/).length < 3;
+
+  const taskText = gptTaskText || (!isLikelySocial ? cleanMessage.trim() : "");
 
   if (!taskText) {
-    await postThreadReply(channelId, threadTs,
-      `Hey! To assign a task, mention me and tag the person: \`@Task Bot @teammate task description here\``
+    console.log("[task] no task found — message looks social or GPT rejected it");
+    await postThreadReply(
+      channelId,
+      threadTs,
+      `Got it ${assignerName}! But I couldn't identify a clear task. Try: \`@Task Bot @${primaryAssignee.name} needs to [specific task description]\``
     );
     return;
   }
