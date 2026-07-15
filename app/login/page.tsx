@@ -52,13 +52,14 @@ function LoginForm() {
         if (password.length < 8) { setMessage({ text: "Password must be at least 8 characters.", ok: false }); }
         else if (password !== confirmPassword) { setMessage({ text: "Passwords do not match.", ok: false }); }
         else {
-          const { error } = await supabase.auth.signUp({ email, password, options: { emailRedirectTo: `${window.location.origin}/auth/callback` } });
-          if (error) { setMessage({ text: error.message, ok: false }); }
+          const res = await fetch("/api/auth/signup", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password }) });
+          const json = await res.json();
+          if (!res.ok) { setMessage({ text: json.error ?? "Something went wrong.", ok: false }); }
           else { setMessage({ text: "Account created! Check your inbox for a verification link before signing in.", ok: true }); setMode("signin"); }
         }
       } else {
-        const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: `${window.location.origin}/auth/callback?next=/reset-password` });
-        if (error) { setMessage({ text: error.message, ok: false }); }
+        const res = await fetch("/api/auth/forgot-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }) });
+        if (!res.ok) { setMessage({ text: "Something went wrong. Please try again.", ok: false }); }
         else { setMessage({ text: "If an account exists for this email, a password reset link has been sent. Check your inbox.", ok: true }); }
       }
     } catch { setMessage({ text: "Something went wrong. Please try again.", ok: false }); }
