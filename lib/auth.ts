@@ -1,5 +1,5 @@
 // Always-allowed accounts — no env var needed.
-const HARDCODED_ALLOWED = ["brandon@firesidetrade.com"];
+const HARDCODED_ALLOWED = ["brandon@firesidetrade.com", "wilmarktorremocha4@gmail.com"];
 
 // Comma-separated list of emails allowed to access the dashboard.
 // Set DASHBOARD_ALLOWED_EMAILS in your Vercel environment variables.
