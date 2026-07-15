@@ -3,7 +3,6 @@
 import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createSupabaseBrowser } from "@/lib/supabase-browser";
-import { isAllowedEmail } from "@/lib/auth";
 
 type Mode = "signin" | "signup" | "forgot";
 
@@ -40,11 +39,6 @@ function LoginForm() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setMessage(null);
-
-    if (!isAllowedEmail(email)) {
-      setMessage({ text: "This email is not authorized to access the Task Tracker.", ok: false });
-      return;
-    }
 
     setBusy(true);
     const supabase = createSupabaseBrowser();
@@ -116,7 +110,7 @@ function LoginForm() {
               <label className="block text-sm font-medium text-slate-600 mb-1.5">Email</label>
               <input
                 type="email" required autoComplete="email" value={email}
-                onChange={e => setEmail(e.target.value)} placeholder="you@operationamz.com"
+                onChange={e => setEmail(e.target.value)} placeholder="you@yourcompany.com"
                 className={INPUT_CLS}
               />
             </div>
