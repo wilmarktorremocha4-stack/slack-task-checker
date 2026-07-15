@@ -27,7 +27,7 @@ function skipWeekend(date: Date, timezone: string): Date {
 export function calculateNextFollowupAt(
   currentFollowupCount: number,
   fromDate: Date = new Date(),
-  timezone: string = "UTC"
+  timezone: string = "America/New_York"
 ): Date | null {
   if (currentFollowupCount >= MAX_FOLLOWUPS) return null;
 

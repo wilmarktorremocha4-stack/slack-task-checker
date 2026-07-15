@@ -130,7 +130,7 @@ export async function sendFollowupForTask(
 
   // Determine next follow-up time for inclusion in message context
   const nextFollowupAt = getCustomNextFollowupAt(task, newFollowupCount)
-    ?? calculateNextFollowupAt(newFollowupCount, now, task.assignee_timezone ?? "UTC");
+    ?? calculateNextFollowupAt(newFollowupCount, now, task.assignee_timezone ?? "America/New_York");
   const nextFollowupHuman = nextFollowupAt ? humanReadableDate(nextFollowupAt.toISOString()) : null;
 
   const followupMessage = await generateFollowupMessage({

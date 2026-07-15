@@ -429,7 +429,7 @@ async function handleNewTaskMention(
     return;
   }
 
-  const nextFollowupAt = calculateNextFollowupAt(0, new Date(), process.env.TEAM_TIMEZONE ?? "UTC");
+  const nextFollowupAt = calculateNextFollowupAt(0, new Date(), process.env.TEAM_TIMEZONE ?? "America/New_York");
   console.log("[task] step 6 — inserting task into supabase, nextFollowupAt:", nextFollowupAt);
 
   const { data, error } = await supabase
@@ -450,7 +450,7 @@ async function handleNewTaskMention(
       followup_count: 0,
       max_followups: 5,
       next_followup_at: nextFollowupAt?.toISOString() ?? null,
-      assignee_timezone: process.env.TEAM_TIMEZONE ?? "UTC",
+      assignee_timezone: process.env.TEAM_TIMEZONE ?? "America/New_York",
     })
     .select()
     .single();
@@ -528,7 +528,7 @@ async function handleThreadReply(
       const nextFollowupAt = calculateNextFollowupAt(
         0,
         new Date(),
-        process.env.TEAM_TIMEZONE ?? "UTC"
+        process.env.TEAM_TIMEZONE ?? "America/New_York"
       );
 
       const matchedMembers = replyMentions.map(id => {
@@ -553,7 +553,7 @@ async function handleThreadReply(
         followup_count: 0,
         max_followups: 5,
         next_followup_at: nextFollowupAt?.toISOString() ?? null,
-        assignee_timezone: process.env.TEAM_TIMEZONE ?? "UTC",
+        assignee_timezone: process.env.TEAM_TIMEZONE ?? "America/New_York",
       }));
 
       await supabase.from("tasks").insert(taskInserts);
@@ -1043,7 +1043,7 @@ async function handleBotMentionInThread(
       await postThreadReply(channelId, threadTs, `Task ${taskIndex + 1} is already active — nothing to restore.`);
       return;
     }
-    const nextFollowupAtRestore = calculateNextFollowupAt(0, new Date(), process.env.TEAM_TIMEZONE ?? "UTC");
+    const nextFollowupAtRestore = calculateNextFollowupAt(0, new Date(), process.env.TEAM_TIMEZONE ?? "America/New_York");
     await supabase.from("tasks").update({
       status: "active",
       completed_at: null,
@@ -1161,7 +1161,7 @@ async function handleBotMentionInThread(
     return result;
   }
 
-  const nextFollowupAt = calculateNextFollowupAt(0, new Date(), process.env.TEAM_TIMEZONE ?? "UTC");
+  const nextFollowupAt = calculateNextFollowupAt(0, new Date(), process.env.TEAM_TIMEZONE ?? "America/New_York");
 
   // ── ADD ASSIGNEE ─────────────────────────────────────────────────────────
   if (command.intent === "add_assignee") {
@@ -1198,7 +1198,7 @@ async function handleBotMentionInThread(
         followup_count: 0,
         max_followups: 5,
         next_followup_at: nextFollowupAt?.toISOString() ?? null,
-        assignee_timezone: process.env.TEAM_TIMEZONE ?? "UTC",
+        assignee_timezone: process.env.TEAM_TIMEZONE ?? "America/New_York",
       }))
     );
 
@@ -1307,7 +1307,7 @@ async function handleBotMentionInThread(
           followup_count: 0,
           max_followups: 5,
           next_followup_at: nextFollowupAt?.toISOString() ?? null,
-          assignee_timezone: process.env.TEAM_TIMEZONE ?? "UTC",
+          assignee_timezone: process.env.TEAM_TIMEZONE ?? "America/New_York",
         }))
       );
       await supabase.from("tasks").insert(inserts);
@@ -1380,7 +1380,7 @@ async function handleBotMentionInThread(
       followup_count: 0,
       max_followups: 5,
       next_followup_at: nextFollowupAt?.toISOString() ?? null,
-      assignee_timezone: process.env.TEAM_TIMEZONE ?? "UTC",
+      assignee_timezone: process.env.TEAM_TIMEZONE ?? "America/New_York",
     }));
 
     await supabase.from("tasks").insert(inserts);
@@ -1422,7 +1422,7 @@ async function handleBotMentionInThread(
     }
 
     const reopenTaskText = tasksToReopen[0].task_text as string;
-    const nextFollowupAt2 = calculateNextFollowupAt(0, new Date(), process.env.TEAM_TIMEZONE ?? "UTC");
+    const nextFollowupAt2 = calculateNextFollowupAt(0, new Date(), process.env.TEAM_TIMEZONE ?? "America/New_York");
 
     // If the command specifies assignees ("assign it only to @Harry"), restrict to those people.
     // GPT returns addNames / mentionedIds + keepExistingAssignees=false for "only to @X" phrasing.
@@ -1462,7 +1462,7 @@ async function handleBotMentionInThread(
             followup_count: 0,
             max_followups: 5,
             next_followup_at: nextFollowupAt2?.toISOString() ?? null,
-            assignee_timezone: process.env.TEAM_TIMEZONE ?? "UTC",
+            assignee_timezone: process.env.TEAM_TIMEZONE ?? "America/New_York",
           }))
         );
       }
@@ -1571,7 +1571,7 @@ async function handleBotMentionInThread(
       followup_count: 0,
       max_followups: 5,
       next_followup_at: nextFollowupAt?.toISOString() ?? null,
-      assignee_timezone: process.env.TEAM_TIMEZONE ?? "UTC",
+      assignee_timezone: process.env.TEAM_TIMEZONE ?? "America/New_York",
     }));
 
     await supabase.from("tasks").insert(inserts);
@@ -1643,7 +1643,7 @@ async function handleVoiceThreadCommand(
     }).filter((m) => m.id !== botUserId2 && m.id !== botEnvId2);
 
     if (matched.length > 0) {
-      const nextFollowupAt2 = calculateNextFollowupAt(0, new Date(), process.env.TEAM_TIMEZONE ?? "UTC");
+      const nextFollowupAt2 = calculateNextFollowupAt(0, new Date(), process.env.TEAM_TIMEZONE ?? "America/New_York");
       await supabase.from("tasks").insert(matched.map((member) => ({
         task_text: pendingVoice.task_text,
         raw_message: pendingVoice.transcription,
@@ -1661,7 +1661,7 @@ async function handleVoiceThreadCommand(
         followup_count: 0,
         max_followups: 5,
         next_followup_at: nextFollowupAt2?.toISOString() ?? null,
-        assignee_timezone: process.env.TEAM_TIMEZONE ?? "UTC",
+        assignee_timezone: process.env.TEAM_TIMEZONE ?? "America/New_York",
       })));
       await supabase.from("pending_voice_tasks").update({ resolved: true }).eq("id", pendingVoice.id);
       const mentions = matched.map((m) => `<@${m.id}>`).join(", ");
@@ -1780,7 +1780,7 @@ async function handleVoiceThreadCommand(
   const senderName = await getSlackUserName(senderId);
   const botUserId = await getBotUserId();
   const botEnvId = process.env.SLACK_BOT_USER_ID ?? "";
-  const nextFollowupAt = calculateNextFollowupAt(0, new Date(), process.env.TEAM_TIMEZONE ?? "UTC");
+  const nextFollowupAt = calculateNextFollowupAt(0, new Date(), process.env.TEAM_TIMEZONE ?? "America/New_York");
 
   // Resolve names mentioned in the transcription to Slack member objects
   function resolveMembers(names: string[], ids: string[] = []): Array<{ id: string; name: string }> {
@@ -1833,7 +1833,7 @@ async function handleVoiceThreadCommand(
         followup_count: 0,
         max_followups: 5,
         next_followup_at: nextFollowupAt?.toISOString() ?? null,
-        assignee_timezone: process.env.TEAM_TIMEZONE ?? "UTC",
+        assignee_timezone: process.env.TEAM_TIMEZONE ?? "America/New_York",
       }))
     ));
     const addedMentions = newMembers.map((m) => `<@${m.id}>`).join(", ");
@@ -1943,7 +1943,7 @@ async function handleVoiceThreadCommand(
             followup_count: 0,
             max_followups: 5,
             next_followup_at: nextFollowupAt?.toISOString() ?? null,
-            assignee_timezone: process.env.TEAM_TIMEZONE ?? "UTC",
+            assignee_timezone: process.env.TEAM_TIMEZONE ?? "America/New_York",
           }))
         )
       );
@@ -2001,7 +2001,7 @@ async function handleVoiceThreadCommand(
       followup_count: 0,
       max_followups: 5,
       next_followup_at: nextFollowupAt?.toISOString() ?? null,
-      assignee_timezone: process.env.TEAM_TIMEZONE ?? "UTC",
+      assignee_timezone: process.env.TEAM_TIMEZONE ?? "America/New_York",
     })));
     const taskMentions = assignees.map((m) => `<@${m.id}>`).join(", ");
     await postThreadReply(channelId, threadTs, `✅ *New task added*\n\n*Assigned to:* ${taskMentions}\n\n${formatTaskBody(newText)}\n\n${taskMentions} — please reply *"done"* in this thread when complete.`);
@@ -2034,7 +2034,7 @@ async function handleVoiceThreadCommand(
     }
 
     const voiceReopenTaskText = voiceTasksToReopen[0].task_text as string;
-    const nextFollowupAt2 = calculateNextFollowupAt(0, new Date(), process.env.TEAM_TIMEZONE ?? "UTC");
+    const nextFollowupAt2 = calculateNextFollowupAt(0, new Date(), process.env.TEAM_TIMEZONE ?? "America/New_York");
 
     // If specific assignees are named ("only to Harry"), restrict the reopen to those people
     const voiceReopenAssignees = resolveMembers(command.addNames);
@@ -2071,7 +2071,7 @@ async function handleVoiceThreadCommand(
             followup_count: 0,
             max_followups: 5,
             next_followup_at: nextFollowupAt2?.toISOString() ?? null,
-            assignee_timezone: process.env.TEAM_TIMEZONE ?? "UTC",
+            assignee_timezone: process.env.TEAM_TIMEZONE ?? "America/New_York",
           }))
         );
       }
@@ -2161,7 +2161,7 @@ async function handleVoiceThreadCommand(
       followup_count: 0,
       max_followups: 5,
       next_followup_at: nextFollowupAt?.toISOString() ?? null,
-      assignee_timezone: process.env.TEAM_TIMEZONE ?? "UTC",
+      assignee_timezone: process.env.TEAM_TIMEZONE ?? "America/New_York",
     })));
     const taskMentions = assignees.map((m) => `<@${m.id}>`).join(", ");
     await postThreadReply(channelId, threadTs, `✅ *Task updated*\n\n*Assigned to:* ${taskMentions}\n\n${formatTaskBody(newText)}\n\n${taskMentions} — please reply *"done"* in this thread when complete.`);
@@ -2302,7 +2302,7 @@ async function handleVoiceMessage(
   const nextFollowupAt = calculateNextFollowupAt(
     0,
     new Date(),
-    process.env.TEAM_TIMEZONE ?? "UTC"
+    process.env.TEAM_TIMEZONE ?? "America/New_York"
   );
 
   // Split on ";" or newlines so each sub-task gets its own DB row and can be
@@ -2330,7 +2330,7 @@ async function handleVoiceMessage(
       followup_count: 0,
       max_followups: 5,
       next_followup_at: nextFollowupAt?.toISOString() ?? null,
-      assignee_timezone: process.env.TEAM_TIMEZONE ?? "UTC",
+      assignee_timezone: process.env.TEAM_TIMEZONE ?? "America/New_York",
     }))
   );
 
