@@ -167,6 +167,25 @@ async function processSlackEvent(event: Record<string, unknown>) {
     return;
   }
 
+  // ── CASE 2.5: Brandon's plain management command in thread (no @bot mention) ──
+  // Brandon can manage tasks without @mentioning the bot — e.g.
+  // "assign this also to @Makoy", "cancel this task", "reassign to @Harry".
+  // Route these to handleBotMentionInThread when they contain management keywords.
+  if (
+    event.type === "message" &&
+    event.thread_ts &&
+    event.thread_ts !== event.ts &&
+    senderId === brandonUserId
+  ) {
+    const msgText = (event.text as string) ?? "";
+    const hasManagementKeywords = /\b(assign|reassign|add|remove|cancel|reopen|restore|unassign)\b/i.test(msgText);
+    if (hasManagementKeywords) {
+      console.log("[slack] → Brandon management command (no bot mention)");
+      await handleBotMentionInThread(event, supabase, brandonUserId);
+      return;
+    }
+  }
+
   // ── CASE 3: Human reply in a task thread (bot NOT mentioned) ─────────────────
   // Only fires for genuine thread replies — NOT top-level channel messages.
   // thread_ts exists and differs from ts only on actual replies.
@@ -441,37 +460,36 @@ async function handleNewTaskMention(
   }
 
   const nextFollowupAt = calculateNextFollowupAt(0, new Date(), process.env.TEAM_TIMEZONE ?? "America/New_York");
-  console.log("[task] step 6 — inserting task into supabase, nextFollowupAt:", nextFollowupAt);
+  console.log("[task] step 6 — inserting", assignees.length, "task row(s), nextFollowupAt:", nextFollowupAt);
 
-  const { data, error } = await supabase
-    .from("tasks")
-    .insert({
-      task_text: parsed.taskText,
-      raw_message: messageText,
-      assigned_to_id: primaryAssignee.id,
-      assigned_to_name: primaryAssignee.name,
-      assignee_ids: assignees.map(a => a.id),
-      assignee_names: assignees.map(a => a.name),
-      assigned_by_id: senderId,
-      assigned_by_name: assignerName,
-      channel_id: channelId,
-      message_ts: messageTs,
-      thread_ts: threadTs,
-      status: "active",
-      followup_count: 0,
-      max_followups: 5,
-      next_followup_at: nextFollowupAt?.toISOString() ?? null,
-      assignee_timezone: process.env.TEAM_TIMEZONE ?? "America/New_York",
-    })
-    .select()
-    .single();
+  // One row per assignee so each person's completion is tracked independently.
+  const taskInserts = assignees.map(assignee => ({
+    task_text: parsed.taskText,
+    raw_message: messageText,
+    assigned_to_id: assignee.id,
+    assigned_to_name: assignee.name,
+    assignee_ids: [assignee.id],
+    assignee_names: [assignee.name],
+    assigned_by_id: senderId,
+    assigned_by_name: assignerName,
+    channel_id: channelId,
+    message_ts: messageTs,
+    thread_ts: threadTs,
+    status: "active",
+    followup_count: 0,
+    max_followups: 5,
+    next_followup_at: nextFollowupAt?.toISOString() ?? null,
+    assignee_timezone: process.env.TEAM_TIMEZONE ?? "America/New_York",
+  }));
+
+  const { error } = await supabase.from("tasks").insert(taskInserts);
 
   if (error) {
     console.error("[task] step 6 failed — supabase insert error:", JSON.stringify(error));
     return;
   }
 
-  console.log("[task] step 7 — task saved, id:", data?.id, "posting confirmation");
+  console.log("[task] step 7 — tasks saved for", assignees.length, "assignee(s), posting confirmation");
 
   const allMentions = assignees.map(a => `<@${a.id}>`).join(", ");
 
