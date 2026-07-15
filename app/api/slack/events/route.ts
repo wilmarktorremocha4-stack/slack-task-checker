@@ -1027,6 +1027,47 @@ async function handleBotMentionInThread(
     return;
   }
 
+  // Intercept "remove [person] from task N" by position number so only that specific
+  // task row is cancelled, not all of the person's tasks in this thread.
+  const removeFromTaskNumMatch = textContent.match(/\bfrom\s+task\s*(\d+)\b/i);
+  if (removeFromTaskNumMatch && /\b(remove|unassign)\b/i.test(textContent) && mentionedIds.length > 0) {
+    const taskIndex = parseInt(removeFromTaskNumMatch[1]) - 1;
+    const allUniqueActiveTexts = [...new Set(activeThreadTasks.map(t => t.task_text as string))];
+    if (taskIndex < 0 || taskIndex >= allUniqueActiveTexts.length) {
+      await postThreadReply(channelId, threadTs,
+        `There ${allUniqueActiveTexts.length === 1 ? "is" : "are"} only *${allUniqueActiveTexts.length} active task${allUniqueActiveTexts.length === 1 ? "" : "s"}* in this thread. Please double-check.`
+      );
+      return;
+    }
+    const removeTargetText = allUniqueActiveTexts[taskIndex];
+    const tasksToCancel = activeThreadTasks.filter(t =>
+      (t.task_text as string) === removeTargetText &&
+      mentionedIds.includes(t.assigned_to_id as string)
+    );
+    if (tasksToCancel.length === 0) {
+      const notAssigned = mentionedIds.map(id => `<@${id}>`).join(", ");
+      await postThreadReply(channelId, threadTs,
+        `${notAssigned} ${mentionedIds.length === 1 ? "is" : "are"} not assigned to Task ${taskIndex + 1}.`
+      );
+      return;
+    }
+    await supabase.from("tasks").update({ status: "cancelled", next_followup_at: null })
+      .in("id", tasksToCancel.map(t => t.id as string));
+    const removedMentions = [...new Set(tasksToCancel.map(t => t.assigned_to_id as string))]
+      .map(id => `<@${id}>`).join(", ");
+    const stillActive = activeThreadTasks.filter(t => !tasksToCancel.some(c => c.id === t.id));
+    const stillActiveMentions = [...new Set(stillActive.map(t => t.assigned_to_id as string))]
+      .map(id => `<@${id}>`).join(", ");
+    await postThreadReply(channelId, threadTs,
+      `🗑️ Removed ${removedMentions} from Task ${taskIndex + 1}.\n\n` +
+      (stillActive.length > 0
+        ? `The remaining task${stillActive.length === 1 ? "" : "s"} are still active with ${stillActiveMentions}.`
+        : "No more active tasks in this thread.")
+    );
+    console.log("[thread-cmd] remove-from-task-num: task", taskIndex + 1, "—", tasksToCancel.length, "row(s) cancelled");
+    return;
+  }
+
   console.log("[thread-cmd] parsing command:", humanText.slice(0, 150));
 
   const allActiveTaskTexts = [...new Set(
@@ -1156,16 +1197,27 @@ async function handleBotMentionInThread(
     }
 
     const removeIds = toRemove.map((m) => m.id);
+
+    // If GPT identified a specific task to remove from (by name), limit to that task text.
+    // Otherwise cancel all active tasks for these people in the thread.
+    let candidateRemoveTasks = activeThreadTasks.filter(t => removeIds.includes(t.assigned_to_id as string));
+    if (command.targetTaskText) {
+      const tLower = command.targetTaskText.toLowerCase();
+      const byText = candidateRemoveTasks.filter(t => {
+        const text = (t.task_text as string).toLowerCase();
+        return text === tLower || text.includes(tLower) || tLower.includes(text);
+      });
+      if (byText.length > 0) candidateRemoveTasks = byText;
+    }
+
     await supabase
       .from("tasks")
       .update({ status: "cancelled", next_followup_at: null })
-      .eq("thread_ts", threadTs)
-      .in("assigned_to_id", removeIds)
-      .in("status", ["active", "revision_requested"]);
+      .in("id", candidateRemoveTasks.map(t => t.id as string));
 
     const removedMentions = toRemove.map((m) => `<@${m.id}>`).join(", ");
     await postThreadReply(channelId, threadTs, `🗑️ Removed ${removedMentions} from this task.`);
-    console.log("[thread-cmd] remove_assignee:", toRemove.map((m) => m.name).join(", "));
+    console.log("[thread-cmd] remove_assignee:", toRemove.map((m) => m.name).join(", "), "tasks:", candidateRemoveTasks.length);
     return;
   }
 

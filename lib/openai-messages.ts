@@ -346,6 +346,7 @@ CRITICAL: cancel_and_replace requires the user to explicitly state BOTH what to 
 targetTaskText rules:
 - For cancel_task: set to the exact task text from the active tasks list that matches what the user wants to cancel. Match using the user's description — e.g. "the cabinet task" → "Buy a cabinet." If the user says "cancel all" or there's only one task, set null.
 - For reopen_task: set to the exact task text from the closed tasks list that the user wants to restore. If there's only one closed task or the user says "restore all", set null.
+- For remove_assignee: set to the exact task text from the active tasks list if the user specifies a particular task to remove from (e.g. "remove Harry from the cabinet task", "unassign Harry from the plates task"). Set null if removing from all tasks or if unclear.
 - For all other intents: set null.
 - Always copy the task text exactly from the provided list — do not paraphrase or invent.
 
