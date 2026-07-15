@@ -13,7 +13,7 @@ function getOpenAIClient(): OpenAI {
 export async function parseTaskFromMessage(
   messageText: string,
   assigneeName: string
-): Promise<{ taskText: string; hasTask: boolean } | null> {
+): Promise<{ taskText: string; hasTask: boolean; textMentionedNames: string[] } | null> {
   try {
     const response = await getOpenAIClient().chat.completions.create({
       model: "gpt-4o-mini",
@@ -25,13 +25,15 @@ Extract the task description from a message where someone is assigning work to $
 Return JSON only with these fields:
 {
   "hasTask": boolean,
-  "taskText": "clean description of what needs to be done"
+  "taskText": "clean description of what needs to be done",
+  "textMentionedNames": ["name1", "name2"]
 }
 Rules:
 - Do NOT include assignee names in taskText — just describe the action itself.
 - Do NOT change verbs or rephrase the action. Use the exact wording from the message.
 - Keep taskText concise but complete — include deadlines if mentioned.
 - If the message is not assigning a task, set hasTask to false and taskText to "".
+- textMentionedNames: list of ALL person names mentioned in the message text as potential assignees or co-assignees. Include first names and full names. If the text says "Harry and Paula", return ["Harry", "Paula"]. Return [] if no extra names found.
 
 Example: "Please ask the clients about their color palette" → taskText: "Ask the clients about their color palette"
 Example: "reach out to new leads and send intro email" → taskText: "Reach out to all new leads and send them the intro email"`,
@@ -49,6 +51,7 @@ Example: "reach out to new leads and send intro email" → taskText: "Reach out 
     const result = JSON.parse(
       response.choices[0]?.message?.content ?? "{}"
     );
+    if (!Array.isArray(result.textMentionedNames)) result.textMentionedNames = [];
     return result;
   } catch {
     return null;

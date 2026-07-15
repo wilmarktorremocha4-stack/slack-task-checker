@@ -367,7 +367,7 @@ async function handleNewTaskMention(
 
   console.log("[task] step 4 — assignees:", allAssigneeNames, "assignerName:", assignerName);
 
-  let parsed: { taskText: string; hasTask: boolean } | null = null;
+  let parsed: { taskText: string; hasTask: boolean; textMentionedNames: string[] } | null = null;
   try {
     parsed = await parseTaskFromMessage(cleanMessage, allAssigneeNames);
     console.log("[task] step 5 — parsed:", JSON.stringify(parsed));
@@ -383,6 +383,40 @@ async function handleNewTaskMention(
       `Got it ${assignerName}! But I couldn't identify a clear task. Try: \`@Task Bot @${primaryAssignee.name} needs to [specific task description]\``
     );
     return;
+  }
+
+  // Check whether any names written in plain text (not @mentioned) are unknown to this workspace.
+  // e.g. "@TaskBot assign to @Harry and Paula" where Paula is not in the channel.
+  if (parsed.textMentionedNames.length > 0) {
+    const teamMembers = await getWorkspaceMembers();
+    const mentionedIdSet = new Set(mentions);
+    const unknownNames = parsed.textMentionedNames.filter(name => {
+      const match = teamMembers.find(m =>
+        m.name.toLowerCase().includes(name.toLowerCase()) ||
+        name.toLowerCase().includes(m.name.split(" ")[0].toLowerCase())
+      );
+      // Known member already @mentioned → fine. Known member not @mentioned → skip silently.
+      // Unknown to the workspace → flag it.
+      if (match) return false;
+      // Also skip if this name is just part of the @mentioned user's own name
+      if (assignees.some(a => a.name.toLowerCase().includes(name.toLowerCase()))) return false;
+      return true;
+    });
+
+    if (unknownNames.length > 0) {
+      const unknownStr = unknownNames.map(n => `*${n}*`).join(", ");
+      const alreadyAssigned = assignees.map(a => `<@${a.id}>`).join(", ");
+      const clarifyTs = await postThreadReply(
+        channelId,
+        threadTs,
+        `⚠️ ${unknownStr} ${unknownNames.length === 1 ? "doesn't seem to be" : "don't seem to be"} in this channel.\n\n` +
+        `Is this task only for ${alreadyAssigned}? Or did you mean someone else?\n\n` +
+        `Please @mention the correct user(s) below so I can create the task.`
+      );
+      await saveBotMessageTs(supabase, channelId, threadTs, clarifyTs);
+      console.log("[task] paused — unknown assignee name(s):", unknownNames.join(", "));
+      return;
+    }
   }
 
   // Idempotency guard — Slack retries events on network errors; skip if already inserted
