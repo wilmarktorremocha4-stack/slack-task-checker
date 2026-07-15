@@ -47,7 +47,7 @@ function LoginForm() {
       if (mode === "signin") {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) { setMessage({ text: error.message, ok: false }); }
-        else { router.push("/dashboard"); router.refresh(); return; }
+        else { window.location.href = "/dashboard"; return; }
       } else if (mode === "signup") {
         if (password.length < 8) { setMessage({ text: "Password must be at least 8 characters.", ok: false }); }
         else if (password !== confirmPassword) { setMessage({ text: "Passwords do not match.", ok: false }); }
