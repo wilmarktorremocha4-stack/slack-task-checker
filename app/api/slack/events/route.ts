@@ -924,12 +924,10 @@ async function handleBotMentionInThread(
 
       const parts: string[] = [`${icon} ${label} ${taskText}`];
 
-      // Current active assignees
+      // Active (in-progress) assignees
       if (activeRows.length > 0) {
-        const detail = activeRows.length === 1
-          ? `<@${activeRows[0].assigned_to_id}> · Active · ${activeRows[0].followup_count}/5 follow-ups sent`
-          : activeRows.map(t => `<@${t.assigned_to_id}> (${t.followup_count}/5 follow-ups)`).join(", ") + " · Active";
-        parts.push(`   📌 *Assigned to:* ${detail}`);
+        const names = activeRows.map(t => `<@${t.assigned_to_id}>`).join(", ");
+        parts.push(`   ⏳ *In progress:* ${names}`);
       }
 
       // Completed assignees
@@ -1685,10 +1683,8 @@ async function handleVoiceThreadCommand(
 
       const parts: string[] = [`${icon} ${label} ${taskText}`];
       if (activeRows.length > 0) {
-        const detail = activeRows.length === 1
-          ? `<@${activeRows[0].assigned_to_id}> · Active · ${activeRows[0].followup_count}/5 follow-ups sent`
-          : activeRows.map(t => `<@${t.assigned_to_id}> (${t.followup_count}/5 follow-ups)`).join(", ") + " · Active";
-        parts.push(`   📌 *Assigned to:* ${detail}`);
+        const names = activeRows.map(t => `<@${t.assigned_to_id}>`).join(", ");
+        parts.push(`   ⏳ *In progress:* ${names}`);
       }
       if (completedRows.length > 0) {
         parts.push(`   ✅ *Completed by:* ${completedRows.map(t => `<@${t.assigned_to_id}>`).join(", ")}`);
