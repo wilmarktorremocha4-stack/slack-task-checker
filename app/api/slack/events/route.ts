@@ -1799,13 +1799,55 @@ async function handleVoiceThreadCommand(
       await postThreadReply(channelId, threadTs, "I couldn't figure out who to remove from the voice note. Please @mention them in a text reply.");
       return;
     }
-    await supabase
-      .from("tasks")
-      .update({ status: "cancelled", next_followup_at: null })
-      .eq("thread_ts", threadTs)
-      .in("assigned_to_id", toRemove.map((m) => m.id))
-      .in("status", ["active", "revision_requested"]);
-    await postThreadReply(channelId, threadTs, `🗑️ Removed ${toRemove.map((m) => `<@${m.id}>`).join(", ")} from this task.`);
+
+    // Identify which specific task to remove from:
+    // 1. GPT set targetTaskText → use it
+    // 2. Keyword overlap: find which active task best matches words in the transcription
+    // 3. Fallback: cancel all of the person's active tasks in this thread
+    let voiceRemoveTargetText = command.targetTaskText;
+    if (!voiceRemoveTargetText) {
+      const stopWords = new Set(["the", "task", "from", "only", "that", "this", "and", "for", "please", "just", "remove", "unassign", "harry", "makoy"]);
+      const meaningfulWords = transcription
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, "")
+        .split(/\s+/)
+        .filter(w => w.length > 2 && !stopWords.has(w));
+      const uniqueActiveTexts = [...new Set(activeThreadTasks.map(t => t.task_text as string))];
+      let bestText = "";
+      let bestScore = 0;
+      for (const taskText of uniqueActiveTexts) {
+        const taskWords = taskText.toLowerCase().replace(/[^a-z0-9\s]/g, "").split(/\s+/);
+        const score = meaningfulWords.filter(w => taskWords.some(tw => tw.includes(w) || w.includes(tw))).length;
+        if (score > bestScore) { bestScore = score; bestText = taskText; }
+      }
+      if (bestScore >= 2) voiceRemoveTargetText = bestText;
+    }
+
+    const removeIds = toRemove.map((m) => m.id);
+    let voiceRemoveCandidates = activeThreadTasks.filter(t => removeIds.includes(t.assigned_to_id as string));
+    if (voiceRemoveTargetText) {
+      const tLower = voiceRemoveTargetText.toLowerCase();
+      const byText = voiceRemoveCandidates.filter(t => {
+        const text = (t.task_text as string).toLowerCase();
+        return text === tLower || text.includes(tLower) || tLower.includes(text);
+      });
+      if (byText.length > 0) voiceRemoveCandidates = byText;
+    }
+
+    await supabase.from("tasks").update({ status: "cancelled", next_followup_at: null })
+      .in("id", voiceRemoveCandidates.map((t) => t.id as string));
+
+    const removedMentions = toRemove.map((m) => `<@${m.id}>`).join(", ");
+    const removedTaskDesc = voiceRemoveTargetText ? ` from "${voiceRemoveTargetText}"` : "";
+    const stillActive = activeThreadTasks.filter(t => !voiceRemoveCandidates.some(c => c.id === t.id));
+    const stillActiveMentions = [...new Set(stillActive.map(t => t.assigned_to_id as string))].map(id => `<@${id}>`).join(", ");
+    await postThreadReply(channelId, threadTs,
+      `🗑️ Removed ${removedMentions}${removedTaskDesc}.\n\n` +
+      (stillActive.length > 0
+        ? `The remaining task${stillActive.length === 1 ? "" : "s"} are still active with ${stillActiveMentions}.`
+        : "No more active tasks in this thread.")
+    );
+    console.log("[voice-thread] remove_assignee:", toRemove.map(m => m.name).join(", "), "target:", voiceRemoveTargetText ?? "all", "cancelled:", voiceRemoveCandidates.length);
     return;
   }
 
