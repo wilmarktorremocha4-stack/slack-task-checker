@@ -29,14 +29,15 @@ Return JSON only with these fields:
   "textMentionedNames": ["name1", "name2"]
 }
 Rules:
-- Do NOT include assignee names in taskText — just describe the action itself.
+- taskText must contain ONLY the task action — nothing else. No names, no "this task is for X", no "assigned to X", no attribution of any kind.
 - Do NOT change verbs or rephrase the action. Use the exact wording from the message.
 - Keep taskText concise but complete — include deadlines if mentioned.
 - If the message is not assigning a task, set hasTask to false and taskText to "".
 - textMentionedNames: list of ALL person names mentioned in the message text as potential assignees or co-assignees. Include first names and full names. If the text says "Harry and Paula", return ["Harry", "Paula"]. Return [] if no extra names found.
 
 Example: "Please ask the clients about their color palette" → taskText: "Ask the clients about their color palette"
-Example: "reach out to new leads and send intro email" → taskText: "Reach out to all new leads and send them the intro email"`,
+Example: "reach out to new leads and send intro email" → taskText: "Reach out to all new leads and send them the intro email"
+Example: "make a pair of shoes and a sandal, ready by next week, assigned to Harry" → taskText: "Make a pair of shoes and a sandal, ready by next week"`,
         },
         {
           role: "user",
@@ -52,6 +53,12 @@ Example: "reach out to new leads and send intro email" → taskText: "Reach out 
       response.choices[0]?.message?.content ?? "{}"
     );
     if (!Array.isArray(result.textMentionedNames)) result.textMentionedNames = [];
+    // Strip trailing attribution phrases GPT sometimes appends despite instructions
+    if (typeof result.taskText === "string") {
+      result.taskText = result.taskText
+        .replace(/[,.]?\s*(This task is (assigned to|for)|assigned to|This is assigned to)[^.]*\.?$/i, "")
+        .trim();
+    }
     return result;
   } catch {
     return null;
