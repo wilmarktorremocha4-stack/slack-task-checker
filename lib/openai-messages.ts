@@ -347,7 +347,7 @@ Intent rules:
 - add_task: creating a brand-new separate task in this same thread without cancelling existing (e.g. "add another task", "also ask them to do X", "add task: X")
 - cancel_task: cancelling/deleting a task, NO replacement (e.g. "cancel the cabinet task", "remove the plates task", "delete this task")
 - cancel_and_replace: cancel a task AND immediately create a new one. Use ONLY when the person provides both a removal AND explicit replacement text in the same message (e.g. "change the cabinet task to buy chairs", "replace this with X", "wrong task, the correct one is X").
-- reopen_task: reactivating a completed or cancelled task (e.g. "restore the plates task", "reopen this task", "uncancel this", "bring back the task")
+- reopen_task: reactivating a completed or cancelled task (e.g. "restore the plates task", "reopen this task", "uncancel this", "bring back the task"). If the message also says who it should be assigned to after reopening (e.g. "restore and assign only to Harry"), populate addNames with those names and set keepExistingAssignees accordingly.
 - unknown: can't determine intent
 
 CRITICAL: "Cancel the [task name]" with NO new task mentioned → cancel_task, NOT cancel_and_replace.

@@ -1410,7 +1410,7 @@ async function handleBotMentionInThread(
       return;
     }
 
-    // Target a specific task if GPT identified one; otherwise reopen all closed tasks
+    // Target a specific task text if GPT identified one; otherwise all closed tasks
     let tasksToReopen = closedTasks;
     if (command.targetTaskText) {
       const tLower = command.targetTaskText.toLowerCase();
@@ -1421,7 +1421,61 @@ async function handleBotMentionInThread(
       if (matched.length > 0) tasksToReopen = matched;
     }
 
+    const reopenTaskText = tasksToReopen[0].task_text as string;
     const nextFollowupAt2 = calculateNextFollowupAt(0, new Date(), process.env.TEAM_TIMEZONE ?? "UTC");
+
+    // If the command specifies assignees ("assign it only to @Harry"), restrict to those people.
+    // GPT returns addNames / mentionedIds + keepExistingAssignees=false for "only to @X" phrasing.
+    const explicitReopenAssignees = resolveMembers(command.addNames, mentionedIds);
+    const isAssigneeRestricted = explicitReopenAssignees.length > 0 && !command.keepExistingAssignees;
+
+    if (isAssigneeRestricted) {
+      const explicitIds = new Set(explicitReopenAssignees.map((m) => m.id));
+
+      // Reopen only the rows for the specified assignees
+      const rowsForThem = tasksToReopen.filter((t) => explicitIds.has(t.assigned_to_id as string));
+
+      if (rowsForThem.length > 0) {
+        // Existing rows — just flip them back to active
+        await supabase.from("tasks").update({
+          status: "active",
+          completed_at: null,
+          next_followup_at: nextFollowupAt2?.toISOString() ?? null,
+          followup_count: 0,
+        }).in("id", rowsForThem.map((t) => t.id as string));
+      } else {
+        // No existing row for this person — create a fresh one
+        await supabase.from("tasks").insert(
+          explicitReopenAssignees.map((member) => ({
+            task_text: reopenTaskText,
+            raw_message: rawText,
+            assigned_to_id: member.id,
+            assigned_to_name: member.name,
+            assignee_ids: [member.id],
+            assignee_names: [member.name],
+            assigned_by_id: senderId,
+            assigned_by_name: senderName,
+            channel_id: channelId,
+            message_ts: event.ts as string,
+            thread_ts: threadTs,
+            status: "active",
+            followup_count: 0,
+            max_followups: 5,
+            next_followup_at: nextFollowupAt2?.toISOString() ?? null,
+            assignee_timezone: process.env.TEAM_TIMEZONE ?? "UTC",
+          }))
+        );
+      }
+
+      const assigneeMentions = explicitReopenAssignees.map((m) => `<@${m.id}>`).join(", ");
+      await postThreadReply(channelId, threadTs,
+        `🔁 Task reopened and assigned to ${assigneeMentions}.\n\n${formatTaskBody(reopenTaskText)}\n\n${assigneeMentions} — please reply *"done"* when complete.`
+      );
+      console.log("[thread-cmd] reopen_task (restricted) — assignees:", explicitReopenAssignees.map((m) => m.name).join(", "));
+      return;
+    }
+
+    // No assignee restriction — reopen all matched rows
     const idsToReopen = [...new Set(tasksToReopen.map((t) => t.id as string))];
     await supabase.from("tasks").update({
       status: "active",
@@ -1432,11 +1486,8 @@ async function handleBotMentionInThread(
 
     const assigneeMentions = [...new Set(tasksToReopen.map((t) => t.assigned_to_id as string))]
       .map((id) => `<@${id}>`).join(", ");
-    const reopenedTaskText = tasksToReopen[0].task_text as string;
-    await postThreadReply(
-      channelId,
-      threadTs,
-      `🔁 Task reopened and follow-ups restarted.\n\n*Assigned to:* ${assigneeMentions}\n\n${formatTaskBody(reopenedTaskText)}\n\n${assigneeMentions} — please reply *"done"* when complete.`
+    await postThreadReply(channelId, threadTs,
+      `🔁 Task reopened and follow-ups restarted.\n\n*Assigned to:* ${assigneeMentions}\n\n${formatTaskBody(reopenTaskText)}\n\n${assigneeMentions} — please reply *"done"* when complete.`
     );
     console.log("[thread-cmd] reopen_task — reopened", idsToReopen.length, "task(s)");
     return;
@@ -1971,7 +2022,7 @@ async function handleVoiceThreadCommand(
       return;
     }
 
-    // Target a specific task if GPT identified one; otherwise reopen all closed tasks
+    // Target a specific task text if GPT identified one; otherwise all closed tasks
     let voiceTasksToReopen = closedTasks;
     if (command.targetTaskText) {
       const tLower = command.targetTaskText.toLowerCase();
@@ -1982,7 +2033,58 @@ async function handleVoiceThreadCommand(
       if (matched.length > 0) voiceTasksToReopen = matched;
     }
 
+    const voiceReopenTaskText = voiceTasksToReopen[0].task_text as string;
     const nextFollowupAt2 = calculateNextFollowupAt(0, new Date(), process.env.TEAM_TIMEZONE ?? "UTC");
+
+    // If specific assignees are named ("only to Harry"), restrict the reopen to those people
+    const voiceReopenAssignees = resolveMembers(command.addNames);
+    const voiceIsRestricted = voiceReopenAssignees.length > 0 && !command.keepExistingAssignees;
+
+    if (voiceIsRestricted) {
+      const explicitIds = new Set(voiceReopenAssignees.map((m) => m.id));
+      const rowsForThem = voiceTasksToReopen.filter((t) => explicitIds.has(t.assigned_to_id as string));
+
+      if (rowsForThem.length > 0) {
+        await supabase.from("tasks").update({
+          status: "active",
+          completed_at: null,
+          next_followup_at: nextFollowupAt2?.toISOString() ?? null,
+          followup_count: 0,
+        }).in("id", rowsForThem.map((t) => t.id as string));
+      } else {
+        // No existing row for this person — create a fresh one
+        await supabase.from("tasks").insert(
+          voiceReopenAssignees.map((member) => ({
+            task_text: voiceReopenTaskText,
+            raw_message: transcription,
+            voice_transcription: transcription,
+            assigned_to_id: member.id,
+            assigned_to_name: member.name,
+            assignee_ids: [member.id],
+            assignee_names: [member.name],
+            assigned_by_id: senderId,
+            assigned_by_name: senderName,
+            channel_id: channelId,
+            message_ts: event.ts as string,
+            thread_ts: threadTs,
+            status: "active",
+            followup_count: 0,
+            max_followups: 5,
+            next_followup_at: nextFollowupAt2?.toISOString() ?? null,
+            assignee_timezone: process.env.TEAM_TIMEZONE ?? "UTC",
+          }))
+        );
+      }
+
+      const voiceAssigneeMentions = voiceReopenAssignees.map((m) => `<@${m.id}>`).join(", ");
+      await postThreadReply(channelId, threadTs,
+        `🔁 Task reopened and assigned to ${voiceAssigneeMentions}.\n\n${formatTaskBody(voiceReopenTaskText)}\n\n${voiceAssigneeMentions} — please reply *"done"* when complete.`
+      );
+      console.log("[voice-thread] reopen_task (restricted) — assignees:", voiceReopenAssignees.map((m) => m.name).join(", "));
+      return;
+    }
+
+    // No assignee restriction — reopen all matched rows
     const idsToReopen = [...new Set(voiceTasksToReopen.map((t) => t.id as string))];
     await supabase.from("tasks").update({
       status: "active",
@@ -1993,11 +2095,8 @@ async function handleVoiceThreadCommand(
 
     const assigneeMentions = [...new Set(voiceTasksToReopen.map((t) => t.assigned_to_id as string))]
       .map((id) => `<@${id}>`).join(", ");
-    const reopenedText = voiceTasksToReopen[0].task_text as string;
-    await postThreadReply(
-      channelId,
-      threadTs,
-      `🔁 Task reopened and follow-ups restarted.\n\n*Assigned to:* ${assigneeMentions}\n\n${formatTaskBody(reopenedText)}\n\n${assigneeMentions} — please reply *"done"* when complete.`
+    await postThreadReply(channelId, threadTs,
+      `🔁 Task reopened and follow-ups restarted.\n\n*Assigned to:* ${assigneeMentions}\n\n${formatTaskBody(voiceReopenTaskText)}\n\n${assigneeMentions} — please reply *"done"* when complete.`
     );
     console.log("[voice-thread] reopen_task — reopened", idsToReopen.length, "task(s)");
     return;
