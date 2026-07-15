@@ -4,41 +4,49 @@ import { Resend } from "resend";
 
 const FROM_EMAIL = process.env.RESEND_FROM_EMAIL ?? "Task Tracker <noreply@operationamz.net>";
 
+function generateOtp(): string {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
 export async function POST(req: Request) {
   try {
     const { email } = await req.json();
     if (!email) return NextResponse.json({ error: "Email required" }, { status: 400 });
 
     const supabase = createSupabaseAdmin();
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://slack-task-checker.vercel.app";
 
-    const { data, error } = await supabase.auth.admin.generateLink({
-      type: "recovery",
-      email,
-      options: { redirectTo: `${appUrl}/auth/callback?next=/reset-password` },
-    });
-
-    // Always return success so we don't reveal which emails exist
-    if (error || !data?.properties?.action_link) {
+    // Check if the user exists — don't reveal this to the client though
+    const { data: users } = await supabase.auth.admin.listUsers();
+    const userExists = users?.users?.some((u) => u.email === email);
+    if (!userExists) {
+      // Return success anyway so we don't reveal which emails are registered
       return NextResponse.json({ ok: true });
     }
+
+    const otp = generateOtp();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+    // Invalidate previous OTPs for this email
+    await supabase.from("email_otps").update({ used: true }).eq("email", email).eq("used", false);
+
+    // Store new OTP
+    await supabase.from("email_otps").insert({ email, otp_code: otp, expires_at: expiresAt.toISOString() });
 
     const resend = new Resend(process.env.RESEND_API_KEY);
     await resend.emails.send({
       from: FROM_EMAIL,
       to: email,
-      subject: "Reset your Task Tracker password",
+      subject: "Your Task Tracker password reset code",
       html: `
         <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
           <h2 style="margin:0 0 16px;font-size:20px;color:#1e293b">Reset your password</h2>
           <p style="color:#475569;margin:0 0 24px;line-height:1.5">
-            Click the button below to reset your Task Tracker password. This link expires in 1 hour.
+            Enter this code to reset your Task Tracker password. It expires in 10 minutes.
           </p>
-          <a href="${data.properties.action_link}"
-             style="display:inline-block;background:#2563eb;color:#fff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:600;font-size:14px">
-            Reset Password
-          </a>
-          <p style="color:#94a3b8;margin:24px 0 0;font-size:12px">
+          <div style="background:#f1f5f9;border-radius:12px;padding:24px;text-align:center;margin-bottom:24px">
+            <span style="font-size:36px;font-weight:800;letter-spacing:12px;color:#1e293b">${otp}</span>
+          </div>
+          <p style="color:#94a3b8;font-size:12px;margin:0">
             If you didn't request this, you can safely ignore this email.
           </p>
         </div>

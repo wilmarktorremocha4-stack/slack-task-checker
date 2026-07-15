@@ -4,7 +4,7 @@ import { useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { createSupabaseBrowser } from "@/lib/supabase-browser";
 
-type Mode = "signin" | "signup" | "otp" | "forgot";
+type Mode = "signin" | "signup" | "otp" | "forgot" | "reset_otp";
 
 const GRADIENT_BG = "linear-gradient(180deg, #060d24 0%, #0d2f7a 28%, #1565c0 56%, #1e88e5 76%, #42a5f5 100%)";
 
@@ -27,6 +27,8 @@ function LoginForm() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [otpCode, setOtpCode] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(
     searchParams.get("error") === "not_allowed"
@@ -66,10 +68,22 @@ function LoginForm() {
           setMode("signin");
         }
 
-      } else {
+      } else if (mode === "forgot") {
         const res = await fetch("/api/auth/forgot-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }) });
         if (!res.ok) { setMessage({ text: "Something went wrong. Please try again.", ok: false }); }
-        else { setMessage({ text: "If an account exists for this email, a password reset link has been sent. Check your inbox.", ok: true }); }
+        else { setMessage({ text: `A 6-digit reset code was sent to ${email}.`, ok: true }); setMode("reset_otp"); }
+
+      } else if (mode === "reset_otp") {
+        if (newPassword.length < 8) { setMessage({ text: "Password must be at least 8 characters.", ok: false }); setBusy(false); return; }
+        if (newPassword !== confirmNewPassword) { setMessage({ text: "Passwords do not match.", ok: false }); setBusy(false); return; }
+        const res = await fetch("/api/auth/reset-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, otp_code: otpCode, new_password: newPassword }) });
+        const json = await res.json();
+        if (!res.ok) { setMessage({ text: json.error ?? "Invalid code.", ok: false }); }
+        else {
+          setMessage({ text: "Password reset! You can now sign in with your new password.", ok: true });
+          setOtpCode(""); setNewPassword(""); setConfirmNewPassword("");
+          setMode("signin");
+        }
       }
     } catch { setMessage({ text: "Something went wrong. Please try again.", ok: false }); }
     finally { setBusy(false); }
@@ -91,13 +105,15 @@ function LoginForm() {
     signup: "Create account",
     otp: "Check your email",
     forgot: "Reset password",
+    reset_otp: "Enter reset code",
   };
 
   const ctas: Record<Mode, string> = {
     signin: "Sign In",
     signup: "Create Account",
     otp: "Verify Code",
-    forgot: "Send Reset Link",
+    forgot: "Send Reset Code",
+    reset_otp: "Reset Password",
   };
 
   return (
@@ -123,7 +139,7 @@ function LoginForm() {
             {headings[mode]}
           </h2>
 
-          {mode === "otp" && (
+          {(mode === "otp" || mode === "reset_otp") && (
             <p className="text-sm text-slate-500 text-center mb-5">
               Enter the 6-digit code sent to <span className="font-semibold text-slate-700">{email}</span>
             </p>
@@ -173,7 +189,7 @@ function LoginForm() {
               </div>
             )}
 
-            {mode === "otp" && (
+            {(mode === "otp" || mode === "reset_otp") && (
               <div>
                 <label className="block text-sm font-medium text-slate-600 mb-1.5">Verification code</label>
                 <input
@@ -184,6 +200,27 @@ function LoginForm() {
                   autoFocus
                 />
               </div>
+            )}
+
+            {mode === "reset_otp" && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-slate-600 mb-1.5">New password</label>
+                  <input
+                    type="password" required autoComplete="new-password"
+                    value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="••••••••"
+                    className={INPUT_CLS}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-600 mb-1.5">Confirm new password</label>
+                  <input
+                    type="password" required autoComplete="new-password"
+                    value={confirmNewPassword} onChange={e => setConfirmNewPassword(e.target.value)} placeholder="••••••••"
+                    className={INPUT_CLS}
+                  />
+                </div>
+              </>
             )}
 
             {mode === "signin" && (
@@ -222,7 +259,19 @@ function LoginForm() {
                 <button type="button" onClick={() => { setMode("signup"); setMessage(null); setOtpCode(""); }} className="text-blue-600 hover:text-blue-700 hover:underline underline-offset-2 font-semibold transition-colors">Back</button>
               </>
             )}
-            {mode === "forgot" && (
+            {mode === "reset_otp" && (
+              <>Didn&apos;t receive it?{" "}
+                <button type="button" disabled={busy} onClick={async () => {
+                  setBusy(true); setMessage(null);
+                  const res = await fetch("/api/auth/forgot-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }) });
+                  setMessage(res.ok ? { text: "A new code was sent.", ok: true } : { text: "Failed to resend.", ok: false });
+                  setBusy(false);
+                }} className="text-blue-600 hover:text-blue-700 hover:underline underline-offset-2 font-semibold transition-colors disabled:opacity-50">Resend code</button>
+                {" · "}
+                <button type="button" onClick={() => { setMode("forgot"); setMessage(null); setOtpCode(""); setNewPassword(""); setConfirmNewPassword(""); }} className="text-blue-600 hover:text-blue-700 hover:underline underline-offset-2 font-semibold transition-colors">Back</button>
+              </>
+            )}
+            {(mode === "forgot") && (
               <button onClick={() => { setMode("signin"); setMessage(null); }} className="text-blue-600 hover:text-blue-700 hover:underline underline-offset-2 font-semibold transition-colors">
                 ← Back to sign in
               </button>
