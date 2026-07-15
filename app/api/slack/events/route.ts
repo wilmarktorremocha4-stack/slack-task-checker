@@ -154,7 +154,12 @@ async function processSlackEvent(event: Record<string, unknown>) {
   }
 
   // ── CASE 1: Bot @mentioned in channel root → create new task ─────────────────
+  // Only Brandon (the manager) can assign tasks. Ignore everyone else silently.
   if (event.type === "app_mention" && !event.thread_ts) {
+    if (senderId !== brandonUserId) {
+      console.log("[slack] → non-manager task mention from", senderId, "— ignoring");
+      return;
+    }
     console.log("[slack] → new task mention");
     await handleNewTaskMention(event, supabase, brandonUserId);
     return;

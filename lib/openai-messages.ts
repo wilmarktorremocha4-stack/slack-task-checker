@@ -31,13 +31,17 @@ Return JSON only with these fields:
 Rules:
 - taskText must contain ONLY the task action — nothing else. No names, no "this task is for X", no "assigned to X", no attribution of any kind.
 - Do NOT change verbs or rephrase the action. Use the exact wording from the message.
-- Keep taskText concise but complete — include deadlines if mentioned.
-- If the message is not assigning a task, set hasTask to false and taskText to "".
+- Keep taskText concise but complete — include deadlines, times, and context mentioned.
+- hasTask should be TRUE whenever the assignee is being told to do something, attend something, prepare something, be somewhere, join a call, or take any action — even if phrased casually or implicitly.
+- hasTask should only be FALSE if the message is purely informational with no action required, or is just a greeting/question with no task.
 - textMentionedNames: list of ALL person names mentioned in the message text as potential assignees or co-assignees. Include first names and full names. If the text says "Harry and Paula", return ["Harry", "Paula"]. Return [] if no extra names found.
 
 Example: "Please ask the clients about their color palette" → taskText: "Ask the clients about their color palette"
 Example: "reach out to new leads and send intro email" → taskText: "Reach out to all new leads and send them the intro email"
-Example: "make a pair of shoes and a sandal, ready by next week, assigned to Harry" → taskText: "Make a pair of shoes and a sandal, ready by next week"`,
+Example: "make a pair of shoes and a sandal, ready by next week, assigned to Harry" → taskText: "Make a pair of shoes and a sandal, ready by next week"
+Example: "needs to be on a call with me today at 1PM for the BWI discussion" → taskText: "Be on a call at 1PM for the BWI discussion"
+Example: "join the client meeting tomorrow at 3PM" → taskText: "Join the client meeting tomorrow at 3PM"
+Example: "needs to prepare the report by Friday" → taskText: "Prepare the report by Friday",
         },
         {
           role: "user",
