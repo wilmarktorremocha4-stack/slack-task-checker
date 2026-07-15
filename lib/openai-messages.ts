@@ -41,7 +41,7 @@ Example: "reach out to new leads and send intro email" → taskText: "Reach out 
 Example: "make a pair of shoes and a sandal, ready by next week, assigned to Harry" → taskText: "Make a pair of shoes and a sandal, ready by next week"
 Example: "needs to be on a call with me today at 1PM for the BWI discussion" → taskText: "Be on a call at 1PM for the BWI discussion"
 Example: "join the client meeting tomorrow at 3PM" → taskText: "Join the client meeting tomorrow at 3PM"
-Example: "needs to prepare the report by Friday" → taskText: "Prepare the report by Friday",
+Example: "needs to prepare the report by Friday" → taskText: "Prepare the report by Friday"`,
         },
         {
           role: "user",
