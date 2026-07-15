@@ -213,11 +213,24 @@ function LoginForm() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-600 mb-1.5">Confirm new password</label>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-sm font-medium text-slate-600">Confirm new password</label>
+                    {confirmNewPassword.length > 0 && (
+                      newPassword === confirmNewPassword
+                        ? <span className="text-xs font-medium text-emerald-600">✓ Passwords match</span>
+                        : <span className="text-xs font-medium text-rose-500">✗ Passwords don&apos;t match</span>
+                    )}
+                  </div>
                   <input
                     type="password" required autoComplete="new-password"
                     value={confirmNewPassword} onChange={e => setConfirmNewPassword(e.target.value)} placeholder="••••••••"
-                    className={INPUT_CLS}
+                    className={`${INPUT_CLS} ${
+                      confirmNewPassword.length > 0
+                        ? newPassword === confirmNewPassword
+                          ? "border-emerald-400 focus:border-emerald-400 focus:ring-emerald-500/20"
+                          : "border-rose-400 focus:border-rose-400 focus:ring-rose-500/20"
+                        : ""
+                    }`}
                   />
                 </div>
               </>
