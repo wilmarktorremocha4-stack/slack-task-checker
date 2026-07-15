@@ -410,14 +410,22 @@ async function handleNewTaskMention(
     console.error("[task] step 5 failed — parseTaskFromMessage error:", err);
   }
 
-  if (!parsed || !parsed.hasTask || !parsed.taskText) {
-    console.log("[task] no task found in message — sending clarification reply");
-    await postThreadReply(
-      channelId,
-      threadTs,
-      `Got it ${assignerName}! But I couldn't identify a clear task. Try: \`@Task Bot @${primaryAssignee.name} needs to [specific task description]\``
+  // If GPT couldn't parse or returned no task text, fall back to the raw clean message.
+  // Brandon tagged someone and wrote text — that is always a task assignment.
+  const taskText = parsed?.taskText?.trim() || cleanMessage.trim();
+
+  if (!taskText) {
+    await postThreadReply(channelId, threadTs,
+      `Hey! To assign a task, mention me and tag the person: \`@Task Bot @teammate task description here\``
     );
     return;
+  }
+
+  // Patch parsed so the rest of the function uses the resolved task text
+  if (parsed) {
+    parsed.taskText = taskText;
+  } else {
+    parsed = { hasTask: true, taskText, textMentionedNames: [] };
   }
 
   // Check whether any names written in plain text (not @mentioned) are unknown to this workspace.
