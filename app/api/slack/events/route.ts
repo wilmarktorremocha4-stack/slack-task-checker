@@ -1232,11 +1232,26 @@ async function handleBotMentionInThread(
 
     const removeIds = toRemove.map((m) => m.id);
 
-    // If GPT identified a specific task to remove from (by name), limit to that task text.
+    // Resolve which task text to target:
+    // 1. GPT provided a targetTaskText → use it
+    // 2. GPT didn't but the message references "task N" → positional fallback
+    let effectiveRemoveTargetText = command.targetTaskText;
+    if (!effectiveRemoveTargetText) {
+      const taskNumFallback = rawText.match(/\btask\s*(\d+)\b/i);
+      if (taskNumFallback) {
+        const tIdx = parseInt(taskNumFallback[1]) - 1;
+        const orderedActiveTexts = [...new Set(activeThreadTasks.map(t => t.task_text as string))];
+        if (tIdx >= 0 && tIdx < orderedActiveTexts.length) {
+          effectiveRemoveTargetText = orderedActiveTexts[tIdx];
+        }
+      }
+    }
+
+    // If a specific task text was identified (by GPT or positional fallback), limit to that task.
     // Otherwise cancel all active tasks for these people in the thread.
     let candidateRemoveTasks = activeThreadTasks.filter(t => removeIds.includes(t.assigned_to_id as string));
-    if (command.targetTaskText) {
-      const tLower = command.targetTaskText.toLowerCase();
+    if (effectiveRemoveTargetText) {
+      const tLower = effectiveRemoveTargetText.toLowerCase();
       const byText = candidateRemoveTasks.filter(t => {
         const text = (t.task_text as string).toLowerCase();
         return text === tLower || text.includes(tLower) || tLower.includes(text);
@@ -1630,6 +1645,67 @@ async function handleVoiceThreadCommand(
   const existingAssigneeNames: string[] = [
     ...new Set(contextTasks.flatMap((t) => (t.assignee_names?.length ? t.assignee_names : [t.assigned_to_name]) as string[])),
   ];
+
+  // ── Summary request via voice note ───────────────────────────────────────
+  const isVoiceSummaryRequest =
+    /\b(what (are|is)|list|show|status of).*task|task.*(list|status|what)/i.test(transcription) ||
+    /\bsummar(y|ize|ies)\b/i.test(transcription);
+
+  if (isVoiceSummaryRequest && senderId === brandonUserId) {
+    console.log("[voice-thread] summary request via voice");
+    const { data: summaryTasks } = await supabase
+      .from("tasks")
+      .select("*")
+      .eq("thread_ts", threadTs)
+      .order("created_at", { ascending: true });
+
+    const tasks = summaryTasks ?? [];
+    if (tasks.length === 0) {
+      await postThreadReply(channelId, threadTs, "No tasks found in this thread.");
+      return;
+    }
+
+    const groupMap = new Map<string, typeof tasks>();
+    for (const t of tasks) {
+      const key = t.task_text as string;
+      if (!groupMap.has(key)) groupMap.set(key, []);
+      groupMap.get(key)!.push(t);
+    }
+
+    const taskCount = groupMap.size;
+    const summaryLines = [...groupMap.entries()].map(([taskText, group], i) => {
+      const activeRows    = group.filter(t => t.status === "active" || t.status === "revision_requested");
+      const completedRows = group.filter(t => t.status === "completed");
+      const cancelledRows = group.filter(t => t.status === "cancelled" || t.status === "escalated");
+
+      const allDone    = group.every(t => t.status === "completed");
+      const noneActive = activeRows.length === 0 && completedRows.length === 0;
+      const icon  = allDone ? "✅" : noneActive ? "🗑️" : "🔵";
+      const label = taskCount === 1 ? `*Task:*` : `*Task ${i + 1}:*`;
+
+      const parts: string[] = [`${icon} ${label} ${taskText}`];
+      if (activeRows.length > 0) {
+        const detail = activeRows.length === 1
+          ? `<@${activeRows[0].assigned_to_id}> · Active · ${activeRows[0].followup_count}/5 follow-ups sent`
+          : activeRows.map(t => `<@${t.assigned_to_id}> (${t.followup_count}/5 follow-ups)`).join(", ") + " · Active";
+        parts.push(`   📌 *Assigned to:* ${detail}`);
+      }
+      if (completedRows.length > 0) {
+        parts.push(`   ✅ *Completed by:* ${completedRows.map(t => `<@${t.assigned_to_id}>`).join(", ")}`);
+      }
+      if (cancelledRows.length > 0 && (activeRows.length > 0 || completedRows.length > 0)) {
+        const from = cancelledRows.map(t => t.assigned_to_name as string).join(", ");
+        const to   = [...activeRows, ...completedRows].map(t => t.assigned_to_name as string).join(", ");
+        parts.push(`   🔄 *History:* Originally assigned to ${from} → Reassigned to ${to}`);
+      } else if (noneActive && cancelledRows.length > 0) {
+        parts.push(`   🗑️ *Cancelled* — was assigned to ${cancelledRows.map(t => `<@${t.assigned_to_id}>`).join(", ")}`);
+      }
+      return parts.join("\n");
+    });
+
+    await postThreadReply(channelId, threadTs, `📋 *Task Summary*\n\n${summaryLines.join("\n\n")}`);
+    return;
+  }
 
   // ── Parse the transcription as a thread command ───────────────────────────
   const voiceAllActiveTaskTexts = [...new Set(activeThreadTasks.map((t) => t.task_text as string))];
