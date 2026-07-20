@@ -5,7 +5,7 @@ let _slackClient: WebClient | null = null;
 
 export function getCompanionSlackClient(): WebClient {
   if (!_slackClient) {
-    _slackClient = new WebClient(process.env.SLACK_BOT_TOKEN!);
+    _slackClient = new WebClient(process.env.COMPANION_SLACK_BOT_TOKEN!);
   }
   return _slackClient;
 }
@@ -14,7 +14,7 @@ export async function verifySlackSignature(
   request: Request,
   rawBody: string
 ): Promise<boolean> {
-  const signingSecret = process.env.SLACK_SIGNING_SECRET!;
+  const signingSecret = process.env.COMPANION_SLACK_SIGNING_SECRET!;
   const timestamp = request.headers.get("x-slack-request-timestamp");
   const slackSignature = request.headers.get("x-slack-signature");
 
@@ -80,7 +80,7 @@ export async function sendDM(
 export async function downloadFile(fileUrl: string): Promise<Buffer | null> {
   try {
     const res = await fetch(fileUrl, {
-      headers: { Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}` },
+      headers: { Authorization: `Bearer ${process.env.COMPANION_SLACK_BOT_TOKEN}` },
     });
     if (!res.ok) return null;
     return Buffer.from(await res.arrayBuffer());

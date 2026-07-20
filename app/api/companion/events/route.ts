@@ -54,8 +54,8 @@ export async function POST(request: Request) {
 
 async function processEvent(event: Record<string, unknown>) {
   const supabase = createPersonalSupabaseAdmin();
-  const channelId = process.env.SLACK_CHANNEL_ID!;
-  const brandonId = process.env.SLACK_BRANDON_USER_ID!;
+  const channelId = process.env.COMPANION_SLACK_CHANNEL_ID!;
+  const brandonId = process.env.COMPANION_SLACK_BRANDON_USER_ID!;
   const botId = await getBotId();
 
   // Ignore bot's own messages
@@ -284,6 +284,6 @@ async function handleVoiceInput(
     messageTs,
     threadTs,
     supabase,
-    process.env.SLACK_BRANDON_USER_ID!
+    process.env.COMPANION_SLACK_BRANDON_USER_ID!
   );
 }

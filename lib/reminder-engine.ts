@@ -71,7 +71,7 @@ export async function processReminders(): Promise<{
 }> {
   const supabase = createPersonalSupabaseAdmin();
   const now = new Date();
-  const channelId = process.env.SLACK_CHANNEL_ID!;
+  const channelId = process.env.COMPANION_SLACK_CHANNEL_ID!;
 
   const { data: dueIdeas } = await supabase
     .from("ideas")
@@ -141,7 +141,7 @@ export async function processReminders(): Promise<{
 
 export async function sendWeeklyDigest(): Promise<void> {
   const supabase = createPersonalSupabaseAdmin();
-  const channelId = process.env.SLACK_CHANNEL_ID!;
+  const channelId = process.env.COMPANION_SLACK_CHANNEL_ID!;
 
   const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
