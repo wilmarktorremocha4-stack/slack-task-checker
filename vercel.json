@@ -5,6 +5,12 @@
     },
     "app/api/slack/events/route.ts": {
       "maxDuration": 30
+    },
+    "app/api/companion/events/route.ts": {
+      "maxDuration": 30
+    },
+    "app/api/companion/cron/route.ts": {
+      "maxDuration": 60
     }
   }
 }

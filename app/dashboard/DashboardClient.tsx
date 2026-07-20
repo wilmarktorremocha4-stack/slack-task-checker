@@ -1,63 +1,82 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { createSupabaseBrowser } from "@/lib/supabase-browser";
-import type { Task, TaskComment } from "@/lib/supabase";
+import type { TeamTask } from "@/lib/supabase-team";
 
-type TaskWithComments = Task & { task_comments: TaskComment[] };
-type SlackUser = { id: string; name: string };
-type ToastType = { id: number; message: string; ok: boolean };
-type TaskAction = "approve" | "cancel" | "revision" | "followup_now" | "reopen" | "message";
-type SortBy = "status" | "date_desc" | "date_asc";
+// ── Types ─────────────────────────────────────────────────────────────────────
 
-const GRADIENT_BG = "linear-gradient(180deg, #060d24 0%, #0d2f7a 28%, #1565c0 56%, #1e88e5 76%, #42a5f5 100%)";
+type IdeaStatus = "active" | "in_progress" | "completed" | "parked" | "abandoned";
+type IdeaPriority = "low" | "medium" | "high" | "critical";
+type IdeaCategory = "business" | "product" | "personal" | "research" | "strategy" | "other";
 
-// Deterministic per-employee color palette — stable across renders
-const EMP_PALETTE = [
-  "#10b981", // emerald
-  "#8b5cf6", // violet
-  "#ec4899", // pink
-  "#f59e0b", // amber
-  "#06b6d4", // cyan
-  "#f97316", // orange
-  "#14b8a6", // teal
-  "#6366f1", // indigo
-  "#ef4444", // red
-  "#22c55e", // green
-];
-
-function getEmployeeColor(name: string): string {
-  let h = 0;
-  for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) | 0;
-  return EMP_PALETTE[Math.abs(h) % EMP_PALETTE.length];
+interface Idea {
+  id: string;
+  title: string;
+  summary: string | null;
+  raw_input: string;
+  status: IdeaStatus;
+  category: IdeaCategory;
+  priority: IdeaPriority;
+  action_steps: string[] | null;
+  next_reminder_at: string | null;
+  reminder_frequency_hours: number;
+  reminder_count: number;
+  reminders_paused: boolean;
+  due_date: string | null;
+  research_results: string | null;
+  created_at: string;
+  completed_at: string | null;
 }
 
-const STATUS = {
-  active:             { label: "Active",        badge: "bg-blue-100 text-blue-700 border-blue-200",          dot: "bg-blue-500" },
-  revision_requested: { label: "Revision Sent", badge: "bg-orange-100 text-orange-700 border-orange-200",    dot: "bg-orange-500" },
-  completed:          { label: "Done",          badge: "bg-emerald-100 text-emerald-700 border-emerald-200", dot: "bg-emerald-500" },
-  cancelled:          { label: "Cancelled",     badge: "bg-slate-100 text-slate-500 border-slate-200",       dot: "bg-slate-400" },
-} as const;
+interface IdeaUpdate {
+  id: string;
+  idea_id: string;
+  update_type: string;
+  content: string;
+  created_at: string;
+}
 
-// "By Employee" lives in the header button only — not in this tab row
-const FILTERS = [
-  { key: "all",                label: "All" },
-  { key: "active",             label: "Active" },
-  { key: "revision_requested", label: "Revision Sent" },
-  { key: "completed",          label: "Done" },
-  { key: "cancelled",          label: "Cancelled" },
-];
+interface CompanionMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  thread_ts: string | null;
+  created_at: string;
+}
 
-// Per-tab color styles for inactive state
-const FILTER_COLORS: Record<string, { tab: string; badge: string }> = {
-  all:                 { tab: "bg-white border-slate-300 text-slate-600 hover:bg-slate-50 hover:border-slate-400",             badge: "bg-slate-100 text-slate-500" },
-  active:              { tab: "bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100 hover:border-blue-400",              badge: "bg-blue-100 text-blue-600" },
-  revision_requested:  { tab: "bg-orange-50 border-orange-300 text-orange-700 hover:bg-orange-100 hover:border-orange-400",   badge: "bg-orange-100 text-orange-600" },
-  completed:           { tab: "bg-emerald-50 border-emerald-300 text-emerald-700 hover:bg-emerald-100 hover:border-emerald-400", badge: "bg-emerald-100 text-emerald-600" },
-  cancelled:           { tab: "bg-slate-50 border-slate-300 text-slate-500 hover:bg-slate-100 hover:border-slate-400",        badge: "bg-slate-100 text-slate-400" },
+interface IdeaDetail extends Idea {
+  idea_updates: IdeaUpdate[];
+  companion_messages: CompanionMessage[];
+}
+
+// ── Status / priority maps ────────────────────────────────────────────────────
+
+const IDEA_STATUS: Record<IdeaStatus, { label: string; dot: string; badge: string }> = {
+  active:      { label: "Active",      dot: "bg-blue-500",    badge: "bg-blue-100 text-blue-700 border-blue-200" },
+  in_progress: { label: "In Progress", dot: "bg-amber-500",   badge: "bg-amber-100 text-amber-700 border-amber-200" },
+  completed:   { label: "Completed",   dot: "bg-emerald-500", badge: "bg-emerald-100 text-emerald-700 border-emerald-200" },
+  parked:      { label: "Parked",      dot: "bg-slate-400",   badge: "bg-slate-100 text-slate-600 border-slate-200" },
+  abandoned:   { label: "Abandoned",   dot: "bg-rose-400",    badge: "bg-rose-100 text-rose-600 border-rose-200" },
 };
+
+const PRIORITY: Record<IdeaPriority, { label: string; cls: string }> = {
+  low:      { label: "Low",      cls: "bg-slate-100 text-slate-500 border-slate-200" },
+  medium:   { label: "Medium",   cls: "bg-blue-100 text-blue-600 border-blue-200" },
+  high:     { label: "High",     cls: "bg-orange-100 text-orange-600 border-orange-200" },
+  critical: { label: "Critical", cls: "bg-rose-100 text-rose-700 border-rose-200" },
+};
+
+const TEAM_STATUS: Record<string, { label: string; dot: string }> = {
+  active:             { label: "Active",        dot: "bg-blue-500" },
+  revision_requested: { label: "Revision Sent", dot: "bg-orange-500" },
+  completed:          { label: "Done",          dot: "bg-emerald-500" },
+  cancelled:          { label: "Cancelled",     dot: "bg-slate-400" },
+  escalated:          { label: "Escalated",     dot: "bg-rose-500" },
+};
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function timeAgo(d: string) {
   const s = (Date.now() - new Date(d).getTime()) / 1000;
@@ -75,900 +94,264 @@ function formatDateTime(d: string) {
   return new Date(d).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hour12: true });
 }
 
-function nextInLabel(d: string | null): { label: string; isOverdue: boolean } | null {
-  if (!d) return null;
-  const diff = new Date(d).getTime() - Date.now();
-  if (diff < 0) {
-    return { label: `Overdue · ${formatDateTime(d)}`, isOverdue: true };
-  }
-  const h = Math.floor(diff / 3600000);
-  const m = Math.floor((diff % 3600000) / 60000);
-  const label = h > 0 ? `Next in ${h}h ${m}m · ${formatDateTime(d)}` : `Next in ${m}m · ${formatDateTime(d)}`;
-  return { label, isOverdue: false };
+function doneThisWeek(ideas: Idea[]) {
+  const weekAgo = Date.now() - 7 * 86400000;
+  return ideas.filter(i => i.status === "completed" && i.completed_at && new Date(i.completed_at).getTime() > weekAgo).length;
 }
 
-function sortByStatus(tasks: TaskWithComments[]) {
-  const order = ["revision_requested", "active", "completed", "cancelled"];
-  return [...tasks].sort((a, b) => {
-    const ai = order.indexOf(a.status);
-    const bi = order.indexOf(b.status);
-    if (ai !== bi) return ai - bi;
-    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-  });
-}
+// ── Style constants ───────────────────────────────────────────────────────────
 
-function applySort(tasks: TaskWithComments[], sort: SortBy) {
-  if (sort === "date_desc") return [...tasks].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-  if (sort === "date_asc")  return [...tasks].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-  return sortByStatus(tasks);
-}
+const CARD = "bg-white border border-slate-200 shadow-sm";
+const INPUT_CLS = "bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0E90C8]/30 focus:border-[#0E90C8] transition-all";
 
-function groupByEmployee(tasks: TaskWithComments[]) {
-  const map: Record<string, TaskWithComments[]> = {};
-  for (const t of tasks) {
-    const names = t.assignee_names?.length ? t.assignee_names : [t.assigned_to_name];
-    for (const name of names) {
-      if (!map[name]) map[name] = [];
-      if (!map[name].includes(t)) map[name].push(t);
-    }
-  }
-  return map;
-}
+// ── Idea Detail Panel ─────────────────────────────────────────────────────────
 
-// Parse Slack mrkdwn mention syntax for display
-function parseSlackContent(text: string, userMap: Record<string, string>): string {
-  return text
-    .replace(/<@([A-Z0-9]+)>/g, (_, id) => `@${userMap[id] ?? id}`)
-    .replace(/<([^|>]+)\|([^>]+)>/g, "$2")
-    .replace(/<([^>]+)>/g, "$1");
-}
-
-// ── Surface styles: solid light cards that stand out from the gradient bg ────
-
-const CARD = "bg-white border border-slate-200 shadow-xl shadow-black/10";
-const CARD_HOVER = "hover:shadow-2xl hover:shadow-black/15 hover:border-slate-300";
-const INPUT_CLS = "w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-800 placeholder-slate-400 hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition-all";
-const HEADER_BTN = "bg-white/95 border border-white hover:bg-white text-slate-700 shadow-lg";
-
-// ── Icons ───────────────────────────────────────────────────────────────────
-
-function IconRefresh({ spinning }: { spinning?: boolean }) {
-  return (
-    <svg className={`w-4 h-4 ${spinning ? "anim-spin-slow" : ""}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21 12a9 9 0 1 1-2.64-6.36" /><path d="M21 3v6h-6" />
-    </svg>
-  );
-}
-function IconBolt() {
-  return <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z" /></svg>;
-}
-function IconCheck() {
-  return <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>;
-}
-function IconEdit() {
-  return <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /></svg>;
-}
-function IconTrash() {
-  return <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /></svg>;
-}
-function IconPlus() {
-  return <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>;
-}
-function IconLogout() {
-  return <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" /></svg>;
-}
-function IconSend() {
-  return <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m22 2-7 20-4-9-9-4Z" /><path d="M22 2 11 13" /></svg>;
-}
-function IconSpinner() {
-  return (
-    <svg className="w-4 h-4 anim-spin-slow" viewBox="0 0 24 24" fill="none">
-      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
-      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-    </svg>
-  );
-}
-function IconBarChart() {
-  return <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="12" width="4" height="9" rx="1" /><rect x="10" y="7" width="4" height="14" rx="1" /><rect x="17" y="3" width="4" height="18" rx="1" /></svg>;
-}
-
-// ── Toast ───────────────────────────────────────────────────────────────────
-
-function Toast({ toasts }: { toasts: ToastType[] }) {
-  if (!toasts.length) return null;
-  return (
-    <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2 pointer-events-none">
-      {toasts.map(t => (
-        <div key={t.id} className={`px-4 py-3 rounded-xl text-sm font-medium shadow-xl border ${
-          t.ok ? "bg-emerald-50 border-emerald-300 text-emerald-800" : "bg-rose-50 border-rose-300 text-rose-800"
-        }`}>
-          {t.ok ? "✓" : "✗"} {t.message}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// ── Confirm dialog ──────────────────────────────────────────────────────────
-
-function ConfirmDialog({ title, body, confirmLabel, danger, onConfirm, onClose }: {
-  title: string; body: string; confirmLabel: string; danger?: boolean; onConfirm: () => void; onClose: () => void;
+function IdeaPanel({ idea: initialIdea, onClose, onStatusChange }: {
+  idea: Idea;
+  onClose: () => void;
+  onStatusChange: (id: string, status: IdeaStatus) => Promise<void>;
 }) {
-  return createPortal(
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className={`${CARD} rounded-2xl w-full max-w-sm p-6 anim-pop`}>
-        <h3 className="text-base font-semibold text-slate-900 mb-2">{title}</h3>
-        <p className="text-sm text-slate-500 mb-6 leading-relaxed">{body}</p>
-        <div className="flex gap-3">
-          <button onClick={onClose} className="flex-1 bg-slate-100 border border-slate-200 hover:bg-slate-200 text-slate-700 font-medium text-sm py-2.5 rounded-xl transition-all active:scale-[0.98]">
-            Keep as is
-          </button>
-          <button
-            onClick={() => { onConfirm(); onClose(); }}
-            className={`flex-1 font-semibold text-sm py-2.5 rounded-xl text-white transition-all active:scale-[0.98] shadow-lg ${
-              danger ? "bg-rose-600 hover:bg-rose-700 shadow-rose-500/25" : "bg-blue-600 hover:bg-blue-700 shadow-blue-500/25"
-            }`}
-          >
-            {confirmLabel}
-          </button>
-        </div>
-      </div>
-    </div>,
-    document.body
-  );
-}
-
-// ── Comment bubble ──────────────────────────────────────────────────────────
-
-function CommentBubble({ c, userMap }: { c: TaskComment; userMap: Record<string, string> }) {
-  const content = parseSlackContent(c.content, userMap);
-
-  if (c.author_type === "system") {
-    return (
-      <div className="flex justify-center my-1">
-        <span className="text-xs text-slate-500 italic px-3 py-1 bg-slate-100 rounded-full text-center border border-slate-200">
-          {content} · {timeAgo(c.created_at)}
-        </span>
-      </div>
-    );
-  }
-  const isBrandon = c.author_type === "brandon";
-  return (
-    <div className={`flex gap-2 ${isBrandon ? "flex-row-reverse" : "flex-row"}`}>
-      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
-        isBrandon ? "bg-blue-600 text-white" : "bg-slate-200 text-slate-600"
-      }`}>
-        {c.author_name.charAt(0).toUpperCase()}
-      </div>
-      <div className={`max-w-[75%] ${isBrandon ? "items-end" : "items-start"} flex flex-col`}>
-        <span className="text-xs text-slate-400 mb-1 px-1">{c.author_name} · {timeAgo(c.created_at)}</span>
-        <div className={`px-3.5 py-2 rounded-2xl text-sm leading-relaxed ${
-          isBrandon
-            ? "bg-blue-600 text-white rounded-tr-sm shadow-md shadow-blue-500/20"
-            : "bg-slate-100 border border-slate-200 text-slate-700 rounded-tl-sm"
-        }`}>
-          {content}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Task Card ───────────────────────────────────────────────────────────────
-
-function TaskCard({ task, expanded, onToggle, onAction, userMap, accentColor, lastReadAt }: {
-  task: TaskWithComments;
-  expanded: boolean;
-  onToggle: () => void;
-  onAction: (taskId: string, action: TaskAction, content?: string) => Promise<void>;
-  userMap: Record<string, string>;
-  accentColor?: string;
-  lastReadAt?: number;
-}) {
-  const [revisionText, setRevisionText] = useState("");
-  const [messageText, setMessageText] = useState("");
+  const [detail, setDetail] = useState<IdeaDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [researchOpen, setResearchOpen] = useState(false);
   const [working, setWorking] = useState<string | null>(null);
-  const [confirm, setConfirm] = useState<"cancel" | "followup_now" | "reopen" | null>(null);
-  const threadRef = useRef<HTMLDivElement>(null);
-  const cfg = STATUS[task.status as keyof typeof STATUS] ?? STATUS.active;
-  const isOpen = task.status === "active" || task.status === "revision_requested";
-  const isActive = task.status === "active";
-  const isClosed = task.status === "completed" || task.status === "escalated" || task.status === "cancelled";
-  const assigneeDisplay = (task.assignee_names?.length ? task.assignee_names : [task.assigned_to_name]).join(", ");
-  const next = nextInLabel(isOpen ? task.next_followup_at : null);
 
   useEffect(() => {
-    if (expanded && threadRef.current) {
-      threadRef.current.scrollTop = threadRef.current.scrollHeight;
-    }
-  }, [expanded, task.task_comments]);
+    fetch(`/api/companion/ideas/${initialIdea.id}`)
+      .then(r => r.json())
+      .then(d => { setDetail(d); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, [initialIdea.id]);
 
-  async function handle(action: TaskAction) {
-    if (action === "revision" && !revisionText.trim()) return;
-    if (action === "message" && !messageText.trim()) return;
-    setWorking(action);
-    const content =
-      action === "revision" ? revisionText
-      : action === "message" ? messageText
-      : action === "approve" ? (revisionText.trim() || undefined)
-      : undefined;
-    await onAction(task.id, action, content);
-    if (action === "revision" || action === "approve") setRevisionText("");
-    if (action === "message") setMessageText("");
+  const idea = detail ?? initialIdea;
+  const cfg = IDEA_STATUS[idea.status] ?? IDEA_STATUS.active;
+  const priCfg = PRIORITY[idea.priority] ?? PRIORITY.medium;
+
+  async function handleStatus(status: IdeaStatus) {
+    setWorking(status);
+    await onStatusChange(idea.id, status);
     setWorking(null);
+    onClose();
   }
 
-  const sortedComments = [...(task.task_comments ?? [])].sort(
-    (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-  );
-  const followupsLeft = task.max_followups - task.followup_count;
-  const assigneeComments = (task.task_comments ?? []).filter(c => c.author_type === "assignee");
-  const unreadComments = lastReadAt
-    ? assigneeComments.filter(c => new Date(c.created_at).getTime() > lastReadAt)
-    : assigneeComments;
-  const replyCount = unreadComments.length;
-  const replyAuthors = [...new Set(unreadComments.map(c => c.author_name))];
+  const isOpen = idea.status === "active" || idea.status === "in_progress";
+  const isClosed = idea.status === "completed" || idea.status === "parked" || idea.status === "abandoned";
 
   return (
-    <div
-      className={`rounded-2xl transition-all duration-200 ${CARD} ${CARD_HOVER}`}
-      style={accentColor ? { borderLeft: `4px solid ${accentColor}` } : undefined}
-    >
-      {confirm === "cancel" && (
-        <ConfirmDialog title="Cancel this task?" body={`${assigneeDisplay} will be notified in Slack that the task is cancelled, and all follow-ups will stop.`} confirmLabel="Yes, cancel task" danger onConfirm={() => handle("cancel")} onClose={() => setConfirm(null)} />
-      )}
-      {confirm === "reopen" && (
-        <ConfirmDialog title="Reopen this task?" body={`${assigneeDisplay} will be notified in Slack that the task is active again, and the follow-up schedule will restart.`} confirmLabel="Yes, reopen task" onConfirm={() => handle("reopen")} onClose={() => setConfirm(null)} />
-      )}
-      {confirm === "followup_now" && (
-        <ConfirmDialog
-          title="Send a follow-up right now?"
-          body={followupsLeft > 0 ? `This sends follow-up #${task.followup_count + 1} of ${task.max_followups} to ${assigneeDisplay} immediately.` : `All ${task.max_followups} follow-ups are used. Sending now will ESCALATE the task and DM ${task.assigned_by_name}.`}
-          confirmLabel={followupsLeft > 0 ? "Send follow-up" : "Escalate now"}
-          danger={followupsLeft <= 0}
-          onConfirm={() => handle("followup_now")}
-          onClose={() => setConfirm(null)}
-        />
-      )}
-
-      {/* Card header */}
-      <button onClick={onToggle} className="w-full text-left p-5 flex items-start gap-4 rounded-2xl transition-colors hover:bg-slate-50/70">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-            <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-0.5 rounded-full border ${cfg.badge}`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
-              {cfg.label}
-            </span>
-            {replyCount > 0 && (
-              <span className="inline-flex items-center gap-1 text-xs font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full">
-                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
-                {replyCount} {replyCount === 1 ? "reply" : "replies"} from {replyAuthors.join(", ")}
+    <div className="fixed inset-0 z-40 flex items-start justify-end">
+      <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative h-full w-full max-w-xl bg-white shadow-2xl flex flex-col overflow-hidden anim-slide-in">
+        {/* Header */}
+        <div className="flex items-start gap-3 p-5 border-b border-slate-200">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-2 flex-wrap">
+              <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-0.5 rounded-full border ${cfg.badge}`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
+                {cfg.label}
               </span>
-            )}
+              <span className={`inline-flex text-xs font-semibold px-2.5 py-0.5 rounded-full border ${priCfg.cls}`}>
+                {priCfg.label}
+              </span>
+              <span className="text-xs text-slate-400 capitalize">{idea.category}</span>
+            </div>
+            <h2 className="font-bold text-slate-900 text-lg leading-snug">{idea.title}</h2>
+            <p className="text-xs text-slate-400 mt-1">Created {formatDate(idea.created_at)}</p>
           </div>
-          <p className="font-semibold text-slate-900 leading-snug">{task.task_text}</p>
-          <p className="text-sm text-slate-500 mt-1 flex items-center gap-1.5 flex-wrap">
-            {accentColor && <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: accentColor }} />}
-            <span className="text-slate-700 font-medium">{assigneeDisplay}</span>
-            <span className="text-slate-300">·</span>
-            assigned by {task.assigned_by_name}
-          </p>
-          <p className="text-xs text-slate-400 mt-0.5">{formatDate(task.created_at)} · {timeAgo(task.created_at)}</p>
-        </div>
-
-        <div className="text-right shrink-0 flex flex-col items-end gap-1">
-          <span className="text-xs text-slate-400">{task.followup_count}/{task.max_followups} follow-ups</span>
-          {next && (
-            <span className={`text-xs font-medium ${next.isOverdue ? "text-rose-600" : "text-blue-600"}`}>
-              {next.label}
-            </span>
-          )}
-          {task.status === "completed" && task.completed_at && (
-            <span className="text-xs text-emerald-600">Completed {timeAgo(task.completed_at)}</span>
-          )}
-          {task.status === "escalated" && task.escalated_at && (
-            <span className="text-xs text-rose-600">Escalated {timeAgo(task.escalated_at)}</span>
-          )}
-          <svg className={`w-4 h-4 text-slate-400 mt-1 transition-transform ${expanded ? "rotate-180" : ""}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="m6 9 6 6 6-6" />
-          </svg>
-        </div>
-      </button>
-
-      {/* Expanded content */}
-      {expanded && (
-        <div className="border-t border-slate-200 px-5 pb-5 pt-4 anim-expand">
-          {/* Thread history */}
-          <div className="mb-4">
-            <p className="text-xs text-slate-400 font-semibold uppercase tracking-wide mb-3">Thread Activity</p>
-            {sortedComments.length > 0 ? (
-              <div ref={threadRef} className="flex flex-col gap-3 max-h-72 overflow-y-auto pr-1 hide-scrollbar bg-slate-50 border border-slate-200 rounded-xl p-3">
-                {sortedComments.map(c => <CommentBubble key={c.id} c={c} userMap={userMap} />)}
-              </div>
-            ) : (
-              <p className="text-sm text-slate-400 italic text-center py-4 bg-slate-50 rounded-xl border border-slate-200">
-                No thread activity yet — Slack replies and actions will appear here.
-              </p>
-            )}
-          </div>
-
-          {/* Open task actions */}
-          {isOpen && (
-            <div className="space-y-3">
-              <div className="flex gap-3">
-                <button disabled={!!working} onClick={() => setConfirm("followup_now")} className="flex-1 inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 hover:-translate-y-0.5 disabled:opacity-50 text-white font-semibold text-sm py-2.5 rounded-xl shadow-lg shadow-blue-500/25 transition-all active:scale-[0.98]">
-                  <IconBolt /> {working === "followup_now" ? "Sending..." : "Send Follow-up Now"}
-                </button>
-                <button disabled={!!working} onClick={() => setConfirm("cancel")} className="flex-1 inline-flex items-center justify-center gap-2 bg-white border border-rose-300 hover:bg-rose-50 text-rose-600 font-medium text-sm py-2.5 rounded-xl transition-all disabled:opacity-50 active:scale-[0.98]">
-                  <IconTrash /> {working === "cancel" ? "Cancelling..." : "Cancel Task"}
-                </button>
-              </div>
-
-              {isActive && (
-                <div className="pt-3 border-t border-slate-200">
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={messageText}
-                      onChange={e => setMessageText(e.target.value)}
-                      onKeyDown={e => { if (e.key === "Enter" && messageText.trim() && !working) handle("message"); }}
-                      placeholder={`Message ${assigneeDisplay} in the Slack thread...`}
-                      className={INPUT_CLS.replace("py-2.5", "py-2")}
-                    />
-                    <button
-                      disabled={!!working || !messageText.trim()}
-                      onClick={() => handle("message")}
-                      className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 hover:-translate-y-0.5 disabled:opacity-40 text-white font-semibold text-sm px-4 py-2 rounded-xl shadow-md shadow-blue-500/20 transition-all active:scale-[0.98]"
-                    >
-                      {working === "message" ? <IconSpinner /> : <IconSend />}
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Closed task actions */}
-          {isClosed && (
-            <button disabled={!!working} onClick={() => setConfirm("reopen")} className="w-full inline-flex items-center justify-center gap-2 bg-white border border-blue-300 hover:bg-blue-50 text-blue-600 font-medium text-sm py-2.5 rounded-xl transition-all disabled:opacity-50 active:scale-[0.98]">
-              <IconRefresh spinning={working === "reopen"} /> {working === "reopen" ? "Reopening..." : "Reopen Task"}
-            </button>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Employee view ─────────────────────────────────────────────────────────────
-
-type EmpLocalState = { filter: string; sort: SortBy };
-
-function EmployeeView({ tasks, expandedId, onToggle, onAction, userMap, readState }: {
-  tasks: TaskWithComments[];
-  expandedId: string | null;
-  onToggle: (id: string) => void;
-  onAction: (taskId: string, action: TaskAction, content?: string) => Promise<void>;
-  userMap: Record<string, string>;
-  readState: Record<string, number>;
-}) {
-  const [empState, setEmpState] = useState<Record<string, EmpLocalState>>({});
-
-  function getEmpState(name: string): EmpLocalState {
-    return empState[name] ?? { filter: "all", sort: "status" };
-  }
-  function setEmpFilter(name: string, filter: string) {
-    setEmpState(prev => ({ ...prev, [name]: { ...getEmpState(name), filter } }));
-  }
-  function setEmpSort(name: string, sort: SortBy) {
-    setEmpState(prev => ({ ...prev, [name]: { ...getEmpState(name), sort } }));
-  }
-
-  const grouped = groupByEmployee(tasks);
-  const employees = Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b));
-
-  if (employees.length === 0) {
-    return (
-      <div className={`text-center text-slate-500 py-16 ${CARD} rounded-2xl`}>
-        No tasks assigned yet.
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-5">
-      {employees.map(([name, empTasks]) => {
-        const color = getEmployeeColor(name);
-        const { filter: empFilter, sort: empSort } = getEmpState(name);
-
-        const total = empTasks.length;
-        const active = empTasks.filter(t => t.status === "active").length;
-        const revision = empTasks.filter(t => t.status === "revision_requested").length;
-        const done = empTasks.filter(t => t.status === "completed").length;
-        const cancelled = empTasks.filter(t => t.status === "cancelled").length;
-        const completionRate = total > 0 ? Math.round((done / total) * 100) : 0;
-        const completedTasks = empTasks.filter(t => t.status === "completed");
-        const avgFollowups = completedTasks.length > 0
-          ? (completedTasks.reduce((s, t) => s + t.followup_count, 0) / completedTasks.length).toFixed(1)
-          : "—";
-        const openTasks = active + revision;
-
-        const empCounts: Record<string, number> = { all: total, active, revision_requested: revision, completed: done, cancelled };
-        const visibleTasks = empFilter === "all" ? empTasks : empTasks.filter(t => t.status === empFilter);
-        const sortedTasks = applySort(visibleTasks, empSort);
-
-        return (
-          <div key={name} className={`rounded-2xl ${CARD} overflow-hidden`}
-            style={{ borderLeft: `5px solid ${color}` }}>
-            {/* Employee header */}
-            <div className="px-5 py-4 border-b border-slate-200" style={{ background: color + "0d" }}>
-              <div className="flex items-start justify-between gap-4 flex-wrap">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-white text-base shadow-md"
-                    style={{ background: color }}>
-                    {name.charAt(0).toUpperCase()}
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
-                      {name}
-                      <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: color }} />
-                    </h3>
-                    <p className="text-xs text-slate-500">{total} task{total !== 1 ? "s" : ""} total</p>
-                  </div>
-                </div>
-
-                {/* Status pill row */}
-                <div className="flex gap-2 text-xs flex-wrap">
-                  {active > 0   && <span className="px-2.5 py-1 rounded-full bg-blue-100 text-blue-700 border border-blue-200">{active} active</span>}
-                  {revision > 0 && <span className="px-2.5 py-1 rounded-full bg-orange-100 text-orange-700 border border-orange-200">{revision} revision</span>}
-                  {done > 0     && <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">{done} done</span>}
-                  {cancelled > 0 && <span className="px-2.5 py-1 rounded-full bg-slate-100 text-slate-500 border border-slate-200">{cancelled} cancelled</span>}
-                </div>
-              </div>
-
-              {/* Productivity metrics — pastel color-coded cards */}
-              <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="bg-blue-50 rounded-xl px-3 py-2.5 border border-blue-200 shadow-sm">
-                  <p className="text-blue-500 text-xs mb-0.5 font-medium">Completion Rate</p>
-                  <p className="text-blue-900 font-bold text-lg leading-none">{completionRate}%</p>
-                  <div className="mt-2 h-1.5 rounded-full bg-blue-100 overflow-hidden">
-                    <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(completionRate, 100)}%`, backgroundColor: color }} />
-                  </div>
-                </div>
-                <div className="bg-amber-50 rounded-xl px-3 py-2.5 border border-amber-200 shadow-sm">
-                  <p className="text-amber-500 text-xs mb-0.5 font-medium">Open Tasks</p>
-                  <p className="text-amber-900 font-bold text-lg leading-none">{openTasks}</p>
-                  <p className="text-amber-500 text-xs mt-1">of {total} total</p>
-                </div>
-                <div className="bg-violet-50 rounded-xl px-3 py-2.5 border border-violet-200 shadow-sm">
-                  <p className="text-violet-500 text-xs mb-0.5 font-medium">Avg Follow-ups</p>
-                  <p className="text-violet-900 font-bold text-lg leading-none">{avgFollowups}</p>
-                  <p className="text-violet-500 text-xs mt-1">per completed task</p>
-                </div>
-                <div className="bg-emerald-50 rounded-xl px-3 py-2.5 border border-emerald-200 shadow-sm">
-                  <p className="text-emerald-500 text-xs mb-0.5 font-medium">Completed</p>
-                  <p className="text-emerald-900 font-bold text-lg leading-none">{done}</p>
-                  <p className="text-emerald-500 text-xs mt-1">{done} of {total} tasks</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Per-employee filter + sort bar */}
-            <div className="px-4 py-2.5 border-b border-slate-100 bg-white flex flex-wrap items-center gap-2">
-              {/* Status filter pills — only show statuses that exist for this employee */}
-              <div className="flex gap-1 flex-wrap flex-1">
-                {FILTERS.map(f => {
-                  const cnt = empCounts[f.key] ?? 0;
-                  if (f.key !== "all" && cnt === 0) return null;
-                  const fc = FILTER_COLORS[f.key] ?? FILTER_COLORS.all;
-                  const isActive = empFilter === f.key;
-                  return (
-                    <button
-                      key={f.key}
-                      onClick={() => setEmpFilter(name, f.key)}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-all flex items-center gap-1 ${
-                        isActive ? "bg-blue-600 border-blue-500 text-white shadow-sm" : fc.tab
-                      }`}
-                    >
-                      {f.label}
-                      {cnt > 0 && (
-                        <span className={`px-1 rounded-full text-xs ${isActive ? "bg-white/25 text-white" : fc.badge}`}>
-                          {cnt}
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Sort controls */}
-              <div className="flex gap-1 shrink-0">
-                {([ ["status", "Status"], ["date_desc", "Newest"], ["date_asc", "Oldest"] ] as [SortBy, string][]).map(([k, l]) => (
-                  <button
-                    key={k}
-                    onClick={() => setEmpSort(name, k)}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-all ${
-                      empSort === k ? "bg-slate-700 border-slate-600 text-white" : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50 hover:border-slate-300"
-                    }`}
-                  >
-                    {l}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Task list */}
-            <div className="p-4 space-y-2 bg-slate-50/60">
-              {sortedTasks.length === 0 ? (
-                <p className="text-center text-sm text-slate-400 italic py-6">
-                  No {empFilter !== "all" ? empFilter.replace(/_/g, " ") + " " : ""}tasks for {name}.
-                </p>
-              ) : sortedTasks.map(task => (
-                <TaskCard key={task.id} task={task} expanded={expandedId === task.id} onToggle={() => onToggle(task.id)} onAction={onAction} userMap={userMap} accentColor={color} lastReadAt={readState[task.id]} />
-              ))}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-// ── New Task Modal ──────────────────────────────────────────────────────────
-
-// Current local time formatted for datetime-local inputs (used as `min`)
-function nowLocalInput(): string {
-  const d = new Date();
-  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
-  return d.toISOString().slice(0, 16);
-}
-
-function NewTaskModal({ onClose, onCreated, toast, initialUsers }: {
-  onClose: () => void; onCreated: () => void; toast: (msg: string, ok: boolean) => void;
-  initialUsers: SlackUser[];
-}) {
-  const [users] = useState<SlackUser[]>(initialUsers);
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [taskText, setTaskText] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [userSearch, setUserSearch] = useState("");
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const searchInputRef = useRef<HTMLInputElement>(null);
-  const [followups, setFollowups] = useState<string[]>([""]);
-  const [followupMode, setFollowupMode] = useState<"scheduled" | "none">("scheduled");
-  const [dueDateMode, setDueDateMode] = useState<"open" | "custom">("open");
-  const [dueDateVal, setDueDateVal] = useState("");
-  const minLocal = nowLocalInput();
-
-  const filteredUsers = userSearch
-    ? users.filter(u => u.name.toLowerCase().includes(userSearch.toLowerCase()))
-    : users;
-
-  function toggleUser(u: SlackUser) {
-    setSelectedIds(prev => prev.includes(u.id) ? prev.filter(id => id !== u.id) : [...prev, u.id]);
-    setUserSearch("");
-    searchInputRef.current?.focus();
-  }
-  function addFollowup() { setFollowups(prev => [...prev, ""]); }
-  function removeFollowup(i: number) { setFollowups(prev => prev.filter((_, idx) => idx !== i)); }
-  function setFollowupAt(i: number, val: string) {
-    setFollowups(prev => { const n = [...prev]; n[i] = val; return n; });
-  }
-  // Sort followups chronologically when user leaves an input (onBlur)
-  function sortFollowups() {
-    setFollowups(prev => {
-      const filled = prev.filter(f => f.trim()).sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
-      const empty = prev.filter(f => !f.trim());
-      return [...filled, ...empty];
-    });
-  }
-
-  const nowMs = Date.now();
-  const dueMs = dueDateMode === "custom" && dueDateVal ? new Date(dueDateVal).getTime() : null;
-  // Validation: past follow-ups, follow-ups after due date, out-of-order entries
-  const pastWarnings = followups.map(f => f ? new Date(f).getTime() < nowMs : false);
-  const afterDueWarnings = followups.map(f => !f || !dueMs ? false : new Date(f).getTime() > dueMs);
-  const outOfOrderWarnings = followups.map((f, i) => {
-    if (!f || i === 0) return false;
-    const prev = followups[i - 1];
-    if (!prev) return false;
-    return new Date(f).getTime() < new Date(prev).getTime();
-  });
-  const dueDateInPast = dueMs !== null && dueMs < nowMs;
-  const hasWarning = pastWarnings.some(Boolean) || afterDueWarnings.some(Boolean) || outOfOrderWarnings.some(Boolean) || dueDateInPast;
-  const filledFollowups = followups.filter(f => f.trim());
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    const needsSchedule = followupMode === "scheduled" && filledFollowups.length === 0;
-    if (!selectedIds.length || !taskText.trim() || hasWarning || needsSchedule) return;
-    const selectedUsers = selectedIds.map(id => users.find(u => u.id === id)!).filter(Boolean);
-    const followupSchedule = followupMode === "none" ? null : filledFollowups
-      .sort((a, b) => new Date(a).getTime() - new Date(b).getTime())
-      .map(f => new Date(f).toISOString());
-    const dueDate = dueDateMode === "custom" && dueDateVal ? new Date(dueDateVal).toISOString() : null;
-    setSubmitting(true);
-    try {
-      const res = await fetch("/api/tasks", {
-        method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ assigneeIds: selectedUsers.map(u => u.id), assigneeNames: selectedUsers.map(u => u.name), taskText, followupSchedule, noFollowup: followupMode === "none", dueDate }),
-      });
-      if (res.ok) { toast("Task created and posted to Slack", true); onCreated(); onClose(); }
-      else { const d = await res.json(); toast(d.error ?? "Failed to create task", false); }
-    } catch { toast("Network error — please try again", false); }
-    finally { setSubmitting(false); }
-  }
-
-  return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 flex items-start justify-center p-4 overflow-y-auto">
-      <div className={`${CARD} rounded-3xl w-full max-w-lg anim-pop my-4`}>
-        <div className="flex items-center justify-between p-6 border-b border-slate-200">
-          <h2 className="text-lg font-semibold text-slate-900">Assign New Task</h2>
-          <button onClick={onClose} className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-all hover:rotate-90 duration-200">
+          <button onClick={onClose} className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center shrink-0 transition-all">
             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
           </button>
         </div>
-        <form onSubmit={submit} className="p-6 space-y-5">
-          {/* Assignees — chips live inside the search bar; dropdown opens on click */}
-          <div>
-            <label className="block text-sm font-medium text-slate-600 mb-2">Assign to <span className="text-slate-400">(select one or more)</span></label>
-            <div
-              className="relative"
-              onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setPickerOpen(false); }}
-            >
-              {/* Combined chip + search field */}
-              <div
-                onClick={() => { setPickerOpen(true); searchInputRef.current?.focus(); }}
-                className={`flex flex-wrap items-center gap-1.5 min-h-[46px] bg-slate-50 border rounded-xl px-3 py-2 cursor-text transition-all ${
-                  pickerOpen ? "border-blue-400 ring-2 ring-blue-500/20" : "border-slate-200 hover:border-slate-300"
-                }`}
-              >
-                {selectedIds.map(id => {
-                  const u = users.find(u => u.id === id);
-                  if (!u) return null;
-                  const c = getEmployeeColor(u.name);
-                  return (
-                    <span key={id} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold text-white shadow-sm" style={{ background: c }}>
-                      {u.name}
-                      <button
-                        type="button"
-                        onClick={e => { e.stopPropagation(); toggleUser(u); }}
-                        className="text-white/70 hover:text-white transition-colors"
-                        aria-label={`Remove ${u.name}`}
-                      >
-                        <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
-                      </button>
-                    </span>
-                  );
-                })}
-                <input
-                  ref={searchInputRef}
-                  type="text"
-                  placeholder={selectedIds.length === 0 ? "Click to choose team members..." : "Add another..."}
-                  value={userSearch}
-                  onChange={e => { setUserSearch(e.target.value); setPickerOpen(true); }}
-                  onFocus={() => setPickerOpen(true)}
-                  className="flex-1 min-w-[120px] bg-transparent border-none outline-none text-sm text-slate-800 placeholder-slate-400 py-0.5"
-                />
-              </div>
 
-              {/* Dropdown — all users, toggle to add/remove */}
-              {pickerOpen && (
-                <div className="absolute left-0 right-0 top-full mt-1 z-10 max-h-44 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-xl divide-y divide-slate-100 hide-scrollbar anim-pop">
-                  {filteredUsers.length === 0 && <p className="text-sm text-slate-400 p-3 text-center">No members found</p>}
-                  {filteredUsers.map(u => {
-                    const sel = selectedIds.includes(u.id);
-                    return (
-                      <button
-                        key={u.id}
-                        type="button"
-                        onClick={() => toggleUser(u)}
-                        className={`w-full text-left px-4 py-2.5 text-sm flex items-center justify-between transition-colors ${sel ? "bg-blue-50 text-blue-700 font-medium" : "text-slate-600 hover:bg-slate-50"}`}
-                      >
-                        <span className="flex items-center gap-2">
-                          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: getEmployeeColor(u.name) }} />
-                          {u.name}
-                        </span>
-                        {sel ? (
-                          <span className="flex items-center gap-1 text-xs text-blue-600 font-medium">
-                            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
-                            Added
-                          </span>
-                        ) : (
-                          <span className="text-xs text-slate-400">Click to add</span>
-                        )}
-                      </button>
-                    );
-                  })}
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto p-5 space-y-5">
+          {idea.summary && (
+            <div>
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Summary</p>
+              <p className="text-sm text-slate-700 leading-relaxed">{idea.summary}</p>
+            </div>
+          )}
+
+          {idea.action_steps && idea.action_steps.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Action Steps</p>
+              <ol className="space-y-1.5">
+                {idea.action_steps.map((step, i) => (
+                  <li key={i} className="flex gap-2.5 text-sm text-slate-700">
+                    <span className="w-5 h-5 rounded-full bg-[#0E90C8]/10 text-[#0E90C8] text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">{i + 1}</span>
+                    <span className="leading-relaxed">{step}</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
+
+          {/* Meta */}
+          <div className="grid grid-cols-2 gap-3">
+            {idea.due_date && (
+              <div className="bg-slate-50 rounded-xl p-3 border border-slate-200">
+                <p className="text-xs text-slate-400 mb-0.5">Due Date</p>
+                <p className="text-sm font-medium text-slate-700">{formatDate(idea.due_date)}</p>
+              </div>
+            )}
+            <div className="bg-slate-50 rounded-xl p-3 border border-slate-200">
+              <p className="text-xs text-slate-400 mb-0.5">Reminder Freq.</p>
+              <p className="text-sm font-medium text-slate-700">Every {idea.reminder_frequency_hours}h</p>
+            </div>
+            {idea.next_reminder_at && !idea.reminders_paused && (
+              <div className="bg-slate-50 rounded-xl p-3 border border-slate-200">
+                <p className="text-xs text-slate-400 mb-0.5">Next Reminder</p>
+                <p className="text-sm font-medium text-slate-700">{formatDateTime(idea.next_reminder_at)}</p>
+              </div>
+            )}
+            <div className="bg-slate-50 rounded-xl p-3 border border-slate-200">
+              <p className="text-xs text-slate-400 mb-0.5">Reminders Sent</p>
+              <p className="text-sm font-medium text-slate-700">{idea.reminder_count}</p>
+            </div>
+          </div>
+
+          {/* Research */}
+          {idea.research_results && (
+            <div>
+              <button
+                onClick={() => setResearchOpen(v => !v)}
+                className="flex items-center gap-2 text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2 hover:text-slate-600 transition-colors"
+              >
+                <svg className={`w-3.5 h-3.5 transition-transform ${researchOpen ? "rotate-90" : ""}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="m9 18 6-6-6-6" /></svg>
+                Research Results
+              </button>
+              {researchOpen && (
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
+                  {idea.research_results}
                 </div>
               )}
             </div>
-          </div>
+          )}
 
-          {/* Task description */}
-          <div>
-            <label className="block text-sm font-medium text-slate-600 mb-2">Task description</label>
-            <textarea required value={taskText} onChange={e => setTaskText(e.target.value)}
-              placeholder="e.g. Prepare the supplier outreach plan by Friday"
-              className={`${INPUT_CLS} resize-none`} rows={3} />
-          </div>
-
-          {/* Due date */}
-          <div>
-            <label className="block text-sm font-medium text-slate-600 mb-2">
-              Due date
-              {dueDateInPast && <span className="text-rose-500 font-medium ml-2 text-xs">⚠ Due date is in the past</span>}
-            </label>
-            <div className="flex gap-2 mb-2">
-              {(["open", "custom"] as const).map(m => (
-                <button key={m} type="button" onClick={() => setDueDateMode(m)}
-                  className={`px-4 py-1.5 rounded-lg text-sm font-medium border transition-all ${dueDateMode === m ? "bg-blue-600 border-blue-600 text-white shadow-md shadow-blue-500/20" : "bg-white border-slate-200 text-slate-500 hover:border-slate-300 hover:text-slate-700"}`}
-                >
-                  {m === "open" ? "Open (no due date)" : "Custom date"}
-                </button>
-              ))}
-            </div>
-            {dueDateMode === "custom" && (
-              <input
-                type="datetime-local"
-                value={dueDateVal}
-                min={minLocal}
-                onChange={e => setDueDateVal(e.target.value)}
-                className={`${INPUT_CLS} ${dueDateInPast ? "border-rose-400" : ""}`}
-              />
-            )}
-          </div>
-
-          {/* Follow-up schedule */}
-          <div>
-            <label className="block text-sm font-medium text-slate-600 mb-2">Follow-up schedule</label>
-            <div className="flex gap-2 mb-3">
-              {(["scheduled", "none"] as const).map(m => (
-                <button key={m} type="button" onClick={() => setFollowupMode(m)}
-                  className={`px-4 py-1.5 rounded-lg text-sm font-medium border transition-all ${followupMode === m ? "bg-blue-600 border-blue-600 text-white shadow-md shadow-blue-500/20" : "bg-white border-slate-200 text-slate-500 hover:border-slate-300 hover:text-slate-700"}`}
-                >
-                  {m === "scheduled" ? "Schedule" : "No follow-up"}
-                </button>
-              ))}
-            </div>
-
-            {followupMode === "none" ? (
-              <div className="flex items-center gap-2.5 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-500">
-                <svg className="w-4 h-4 shrink-0 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
-                No automatic follow-ups will be sent for this task.
-              </div>
-            ) : (
+          {/* Timeline */}
+          {loading && <div className="text-center text-sm text-slate-400 py-4">Loading history...</div>}
+          {detail && detail.idea_updates.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">Timeline</p>
               <div className="space-y-2">
-                {followups.map((f, i) => {
-                  const isPast = pastWarnings[i];
-                  const isAfterDue = afterDueWarnings[i];
-                  const isOutOfOrder = outOfOrderWarnings[i];
-                  const hasFieldWarning = isPast || isAfterDue || isOutOfOrder;
-                  const ordinal = ["1st","2nd","3rd"][i] ?? `${i + 1}th`;
-                  return (
-                    <div key={i} className="flex gap-2 items-end">
-                      <div className="flex-1">
-                        <p className="text-xs text-slate-400 mb-1 flex items-center gap-2 flex-wrap">
-                          <span>{ordinal} Follow-up</span>
-                          {isPast && <span className="text-rose-500 font-medium">⚠ This time is already in the past</span>}
-                          {isAfterDue && !isPast && <span className="text-rose-500 font-medium">⚠ After due date</span>}
-                          {isOutOfOrder && !isPast && !isAfterDue && <span className="text-amber-600 font-medium">⚠ Earlier than previous — will auto-sort</span>}
-                        </p>
-                        <input
-                          type="datetime-local"
-                          value={f}
-                          min={minLocal}
-                          onChange={e => setFollowupAt(i, e.target.value)}
-                          onBlur={sortFollowups}
-                          className={`${INPUT_CLS} ${hasFieldWarning ? "border-rose-400" : ""}`}
-                        />
-                      </div>
-                      {followups.length > 1 && (
-                        <button type="button" onClick={() => removeFollowup(i)}
-                          className="w-9 h-9 rounded-lg bg-rose-50 border border-rose-200 text-rose-500 hover:bg-rose-100 flex items-center justify-center transition-all shrink-0">
-                          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
-                        </button>
-                      )}
+                {detail.idea_updates.map(u => (
+                  <div key={u.id} className="flex gap-2.5 text-sm">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#0E90C8] mt-1.5 shrink-0" />
+                    <div className="flex-1">
+                      <span className="text-slate-700">{u.content}</span>
+                      <span className="text-xs text-slate-400 ml-2">{timeAgo(u.created_at)}</span>
                     </div>
-                  );
-                })}
-                <button type="button" onClick={addFollowup}
-                  className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 bg-blue-50 border border-blue-200 hover:border-blue-300 px-3 py-1.5 rounded-lg transition-all">
-                  <IconPlus /> Add follow-up
-                </button>
+                  </div>
+                ))}
               </div>
-            )}
-          </div>
+            </div>
+          )}
 
-          <div className="flex gap-3 pt-1">
-            <button type="button" onClick={onClose} className="flex-1 bg-slate-100 border border-slate-200 hover:bg-slate-200 text-slate-700 font-medium text-sm py-3 rounded-xl transition-all active:scale-[0.98]">
-              Cancel
+          {/* Slack messages */}
+          {detail && detail.companion_messages.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">Slack Thread</p>
+              <div className="space-y-2">
+                {detail.companion_messages.map(m => (
+                  <div key={m.id} className={`flex gap-2 ${m.role === "user" ? "flex-row-reverse" : ""}`}>
+                    <div className={`max-w-[80%] px-3 py-2 rounded-2xl text-sm leading-relaxed ${
+                      m.role === "user"
+                        ? "bg-[#0E90C8] text-white rounded-tr-sm"
+                        : "bg-slate-100 text-slate-700 border border-slate-200 rounded-tl-sm"
+                    }`}>
+                      {m.content}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer actions */}
+        <div className="p-4 border-t border-slate-200 bg-slate-50">
+          {isOpen && (
+            <div className="flex gap-2 flex-wrap">
+              <button disabled={!!working} onClick={() => handleStatus("completed")} className="flex-1 text-sm font-semibold py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white transition-all disabled:opacity-50 active:scale-[0.98]">
+                {working === "completed" ? "..." : "Mark Done"}
+              </button>
+              <button disabled={!!working} onClick={() => handleStatus("in_progress")} className="flex-1 text-sm font-medium py-2 rounded-xl bg-amber-100 border border-amber-300 hover:bg-amber-200 text-amber-700 transition-all disabled:opacity-50 active:scale-[0.98]">
+                {working === "in_progress" ? "..." : "In Progress"}
+              </button>
+              <button disabled={!!working} onClick={() => handleStatus("parked")} className="text-sm font-medium py-2 px-3 rounded-xl bg-slate-100 border border-slate-200 hover:bg-slate-200 text-slate-600 transition-all disabled:opacity-50 active:scale-[0.98]">
+                {working === "parked" ? "..." : "Park"}
+              </button>
+              <button disabled={!!working} onClick={() => handleStatus("abandoned")} className="text-sm font-medium py-2 px-3 rounded-xl bg-rose-50 border border-rose-200 hover:bg-rose-100 text-rose-600 transition-all disabled:opacity-50 active:scale-[0.98]">
+                {working === "abandoned" ? "..." : "Abandon"}
+              </button>
+            </div>
+          )}
+          {isClosed && (
+            <button disabled={!!working} onClick={() => handleStatus("active")} className="w-full text-sm font-medium py-2 rounded-xl bg-[#0E90C8]/10 border border-[#0E90C8]/30 hover:bg-[#0E90C8]/20 text-[#0E90C8] transition-all disabled:opacity-50 active:scale-[0.98]">
+              {working === "active" ? "..." : "Reopen"}
             </button>
-            <button type="submit" disabled={!selectedIds.length || !taskText.trim() || (followupMode === "scheduled" && filledFollowups.length === 0) || hasWarning || submitting}
-              className="flex-1 bg-blue-600 hover:bg-blue-700 hover:-translate-y-0.5 disabled:opacity-50 text-white font-semibold text-sm py-3 rounded-xl shadow-lg shadow-blue-500/25 transition-all active:scale-[0.98]">
-              {submitting ? "Posting to Slack..." : "Assign Task"}
-            </button>
-          </div>
-        </form>
+          )}
+        </div>
       </div>
+
+      <style jsx>{`
+        .anim-slide-in { animation: slideIn 0.2s ease-out; }
+        @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+      `}</style>
     </div>
   );
 }
 
-// ── Main Dashboard ──────────────────────────────────────────────────────────
+// ── Main Dashboard ────────────────────────────────────────────────────────────
 
-export default function DashboardClient({ initialTasks, userEmail }: {
-  initialTasks: TaskWithComments[];
+export default function DashboardClient({ initialIdeas, initialTeamTasks, userEmail }: {
+  initialIdeas: Idea[];
+  initialTeamTasks: TeamTask[];
   userEmail?: string | null;
 }) {
   const router = useRouter();
-  const [tasks, setTasks] = useState<TaskWithComments[]>(sortByStatus(initialTasks));
-  const [filter, setFilter] = useState("all");
-  const [isEmployeeView, setIsEmployeeView] = useState(false);
-  const [sortBy, setSortBy] = useState<SortBy>("status");
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [newTaskOpen, setNewTaskOpen] = useState(false);
-  const [lastRefresh, setLastRefresh] = useState(new Date());
+  const [activeTab, setActiveTab] = useState<"ideas" | "team">("ideas");
+  const [ideas, setIdeas] = useState<Idea[]>(initialIdeas);
+  const [selectedIdea, setSelectedIdea] = useState<Idea | null>(null);
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [priorityFilter, setPriorityFilter] = useState<string>("all");
+  const [search, setSearch] = useState("");
   const [refreshing, setRefreshing] = useState(false);
+  const [lastRefresh, setLastRefresh] = useState(new Date());
   const [signingOut, setSigningOut] = useState(false);
-  const [toasts, setToasts] = useState<ToastType[]>([]);
-  const [users, setUsers] = useState<SlackUser[]>([]);
-  const [userMap, setUserMap] = useState<Record<string, string>>({});
-  const [readState, setReadState] = useState<Record<string, number>>({});
-  const toastIdRef = useRef(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Load read-state from localStorage on mount
-  useEffect(() => {
-    try {
-      const stored = JSON.parse(localStorage.getItem("task-read-state") ?? "{}");
-      setReadState(stored);
-    } catch {}
-  }, []);
-
-  const markRead = useCallback((taskId: string) => {
-    setReadState(prev => {
-      const next = { ...prev, [taskId]: Date.now() };
-      try { localStorage.setItem("task-read-state", JSON.stringify(next)); } catch {}
-      return next;
-    });
-  }, []);
-
-  // Load users for mention resolution and modal
-  useEffect(() => {
-    fetch("/api/slack/users", { cache: "no-store" })
-      .then(r => r.json())
-      .then(d => {
-        const members: SlackUser[] = d.members ?? [];
-        setUsers(members);
-        const map: Record<string, string> = {};
-        for (const u of members) map[u.id] = u.name;
-        setUserMap(map);
-      })
-      .catch(() => {});
-  }, []);
-
-  const addToast = useCallback((message: string, ok: boolean) => {
-    const id = ++toastIdRef.current;
-    setToasts(prev => [...prev, { id, message, ok }]);
-    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
-  }, []);
-
-  const refresh = useCallback(async (opts?: { silent?: boolean }) => {
+  const refreshIdeas = useCallback(async () => {
     setRefreshing(true);
     try {
-      const res = await fetch("/api/dashboard/tasks", { cache: "no-store" });
-      if (!res.ok) { if (!opts?.silent) addToast("Could not refresh — please try again", false); return; }
-      const { tasks: fresh } = await res.json();
-      setTasks(sortByStatus(fresh));
-      setLastRefresh(new Date());
-    } catch { if (!opts?.silent) addToast("Network error while refreshing", false); }
-    finally { setRefreshing(false); }
-  }, [addToast]);
+      const params = new URLSearchParams();
+      if (statusFilter !== "all") params.set("status", statusFilter);
+      if (categoryFilter !== "all") params.set("category", categoryFilter);
+      if (search) params.set("search", search);
+      const res = await fetch(`/api/companion/ideas?${params.toString()}`, { cache: "no-store" });
+      if (res.ok) {
+        const { ideas: fresh } = await res.json();
+        setIdeas(fresh);
+        setLastRefresh(new Date());
+      }
+    } finally {
+      setRefreshing(false);
+    }
+  }, [statusFilter, categoryFilter, search]);
 
   useEffect(() => {
-    const timer = setInterval(() => refresh({ silent: true }), 30_000);
-    return () => clearInterval(timer);
-  }, [refresh]);
+    timerRef.current = setInterval(() => refreshIdeas(), 30_000);
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [refreshIdeas]);
+
+  async function handleStatusChange(id: string, status: IdeaStatus) {
+    await fetch(`/api/companion/ideas/${id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ status }),
+    });
+    await refreshIdeas();
+  }
 
   async function signOut() {
     setSigningOut(true);
@@ -977,188 +360,281 @@ export default function DashboardClient({ initialTasks, userEmail }: {
       await supabase.auth.signOut();
       router.push("/login");
       router.refresh();
-    } catch {
-      addToast("Sign out failed — please try again", false);
-      setSigningOut(false);
+    } catch { setSigningOut(false); }
+  }
+
+  // Stats
+  const total = ideas.length;
+  const activeCount = ideas.filter(i => i.status === "active" || i.status === "in_progress").length;
+  const doneWeek = doneThisWeek(ideas);
+  const highPri = ideas.filter(i => (i.priority === "high" || i.priority === "critical") && (i.status === "active" || i.status === "in_progress")).length;
+
+  // Filter
+  const visibleIdeas = ideas.filter(idea => {
+    if (statusFilter !== "all" && idea.status !== statusFilter) return false;
+    if (categoryFilter !== "all" && idea.category !== categoryFilter) return false;
+    if (priorityFilter !== "all" && idea.priority !== priorityFilter) return false;
+    if (search) {
+      const q = search.toLowerCase();
+      return (
+        idea.title.toLowerCase().includes(q) ||
+        (idea.summary ?? "").toLowerCase().includes(q) ||
+        idea.raw_input.toLowerCase().includes(q)
+      );
     }
-  }
-
-  async function handleAction(taskId: string, action: TaskAction, content?: string) {
-    try {
-      let res: Response;
-      if (action === "revision") {
-        res = await fetch(`/api/tasks/${taskId}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ content }) });
-      } else if (action === "message") {
-        res = await fetch(`/api/tasks/${taskId}/message`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ content }) });
-      } else {
-        res = await fetch(`/api/tasks/${taskId}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ action, content }) });
-      }
-      if (res.ok) {
-        const msgs: Record<TaskAction, string> = {
-          approve: "Task approved and closed",
-          cancel: "Task cancelled — assignee notified in Slack",
-          revision: "Revision sent to the Slack thread",
-          followup_now: "Follow-up sent to Slack",
-          reopen: "Task reopened — assignee notified in Slack",
-          message: "Message sent to the Slack thread",
-        };
-        addToast(msgs[action], true);
-        await refresh({ silent: true });
-      } else {
-        const d = await res.json().catch(() => ({}));
-        addToast(d.error ?? "Something went wrong", false);
-      }
-    } catch { addToast("Network error — please try again", false); }
-  }
-
-  const counts = {
-    all: tasks.length,
-    active: tasks.filter(t => t.status === "active").length,
-    revision_requested: tasks.filter(t => t.status === "revision_requested").length,
-    completed: tasks.filter(t => t.status === "completed").length,
-    cancelled: tasks.filter(t => t.status === "cancelled").length,
-  } as Record<string, number>;
-
-  const filteredTasks = filter === "all" ? tasks : tasks.filter(t => t.status === filter);
-  const visible = applySort(filteredTasks, sortBy);
+    return true;
+  });
 
   return (
-    <main className="min-h-screen relative text-white overflow-x-hidden">
-      {/* Fixed gradient background — stays put while the page scrolls */}
-      <div className="fixed inset-0 -z-10" style={{ background: GRADIENT_BG }} />
-
-      <Toast toasts={toasts} />
-      {newTaskOpen && (
-        <NewTaskModal
-          onClose={() => setNewTaskOpen(false)}
-          onCreated={() => refresh({ silent: true })}
-          toast={addToast}
-          initialUsers={users}
+    <main className="min-h-screen text-slate-900" style={{ background: "radial-gradient(ellipse at top, #0d1b2e 0%, #030A18 60%)" }}>
+      {selectedIdea && (
+        <IdeaPanel
+          idea={selectedIdea}
+          onClose={() => setSelectedIdea(null)}
+          onStatusChange={handleStatusChange}
         />
       )}
 
-      <div className="relative max-w-4xl mx-auto px-4 py-8">
+      <div className="max-w-6xl mx-auto px-4 py-8">
         {/* Header */}
-        <div className="flex items-center justify-between mb-8 gap-3 flex-wrap">
+        <div className="flex items-center justify-between mb-8 gap-4 flex-wrap">
           <div>
-            <h1 className="text-4xl font-black tracking-tight leading-none text-white drop-shadow-md">
-              Task{" "}
-              <span style={{ background: "linear-gradient(90deg, #7dd3fc, #bae6fd, #e0f2fe)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
-                Tracker
-              </span>
-            </h1>
-            <p className="text-blue-100/70 text-xs mt-1 drop-shadow">
+            <p className="text-[#0E90C8] text-xs font-bold tracking-[0.25em] uppercase mb-1">OperationAMZ</p>
+            <h1 className="text-3xl font-bold text-white tracking-tight">Executive AI</h1>
+            <p className="text-white/40 text-xs mt-1">
               Updated {timeAgo(lastRefresh.toISOString())}
               {userEmail && <span className="hidden sm:inline"> · {userEmail}</span>}
             </p>
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <button onClick={() => refresh()} disabled={refreshing} className={`inline-flex items-center gap-2 ${HEADER_BTN} font-medium text-sm px-4 py-2.5 rounded-xl transition-all disabled:opacity-60 active:scale-[0.98]`}>
-              <IconRefresh spinning={refreshing} />
-              <span className="hidden sm:inline">{refreshing ? "Refreshing..." : "Refresh"}</span>
+          <div className="flex items-center gap-2">
+            <a
+              href="/voice"
+              className="inline-flex items-center gap-2 bg-[#0E90C8]/20 border border-[#0E90C8]/40 hover:bg-[#0E90C8]/30 text-[#0E90C8] font-medium text-sm px-4 py-2.5 rounded-xl transition-all"
+            >
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3M8 23h8"/></svg>
+              Voice
+            </a>
+            <button
+              onClick={() => refreshIdeas()}
+              disabled={refreshing}
+              className="inline-flex items-center gap-2 bg-white/10 border border-white/20 hover:bg-white/20 text-white font-medium text-sm px-4 py-2.5 rounded-xl transition-all disabled:opacity-60"
+            >
+              <svg className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36" /><path d="M21 3v6h-6" /></svg>
+              {refreshing ? "Refreshing..." : "Refresh"}
             </button>
             <button
-              onClick={() => setIsEmployeeView(v => !v)}
-              className={`inline-flex items-center gap-2 font-medium text-sm px-4 py-2.5 rounded-xl transition-all active:scale-[0.98] shadow-lg ${
-                isEmployeeView
-                  ? "bg-indigo-600 border border-indigo-500 text-white shadow-indigo-500/30"
-                  : HEADER_BTN
-              }`}
+              onClick={signOut}
+              disabled={signingOut}
+              className="inline-flex items-center gap-2 bg-white/10 border border-white/20 hover:bg-rose-500/20 hover:border-rose-500/40 text-white/70 hover:text-rose-400 font-medium text-sm px-3.5 py-2.5 rounded-xl transition-all disabled:opacity-60"
             >
-              <IconBarChart />
-              <span className="hidden sm:inline">By Employee</span>
-            </button>
-            <button onClick={() => setNewTaskOpen(true)} className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 border border-blue-500 hover:-translate-y-0.5 text-white font-semibold text-sm px-5 py-2.5 rounded-xl shadow-lg shadow-blue-900/40 transition-all active:scale-[0.98]">
-              <IconPlus /> New Task
-            </button>
-            <button onClick={signOut} disabled={signingOut} className="inline-flex items-center gap-2 bg-white/95 border border-rose-300 hover:bg-rose-50 hover:border-rose-400 text-rose-500 hover:text-rose-600 font-medium text-sm px-3.5 py-2.5 rounded-xl shadow-lg transition-all disabled:opacity-60 active:scale-[0.98]">
-              {signingOut ? <IconSpinner /> : <IconLogout />}
-              <span className="hidden sm:inline">{signingOut ? "Signing out..." : "Sign out"}</span>
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" /></svg>
+              {signingOut ? "..." : "Sign out"}
             </button>
           </div>
         </div>
 
-        {/* Stats — solid white cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-          {[
-            { label: "Active",    count: counts.active,             color: "text-blue-600" },
-            { label: "Revision",  count: counts.revision_requested, color: "text-orange-600" },
-            { label: "Done",      count: counts.completed,          color: "text-emerald-600" },
-            { label: "Cancelled", count: counts.cancelled,          color: "text-slate-500" },
-          ].map((s, i) => (
-            <div key={s.label} className={`${CARD} rounded-2xl p-4 text-center anim-rise hover:-translate-y-0.5 transition-all duration-200`} style={{ animationDelay: `${i * 60}ms` }}>
-              <p className="text-slate-500 text-xs mb-1 font-medium">{s.label}</p>
-              <p className={`text-2xl font-bold ${s.color}`}>{s.count}</p>
-            </div>
+        {/* Tabs */}
+        <div className="flex gap-1 mb-6 bg-white/5 rounded-xl p-1 w-fit border border-white/10">
+          {(["ideas", "team"] as const).map(tab => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-5 py-2 rounded-lg text-sm font-semibold transition-all ${
+                activeTab === tab
+                  ? "bg-[#0E90C8] text-white shadow-md"
+                  : "text-white/50 hover:text-white/80"
+              }`}
+            >
+              {tab === "ideas" ? "Personal Ideas" : "Team Tasks"}
+            </button>
           ))}
         </div>
 
-        {/* Filter tabs — color-coded per status, always visible */}
-        <div className="flex gap-1.5 mb-4 flex-wrap">
-          {FILTERS.map(f => {
-            const fc = FILTER_COLORS[f.key] ?? FILTER_COLORS.all;
-            const isActive = filter === f.key;
-            return (
-              <button
-                key={f.key}
-                onClick={() => { setFilter(f.key); if (f.key === "all") setSortBy("status"); }}
-                className={`shrink-0 px-3.5 py-1.5 rounded-xl text-sm font-medium transition-all flex items-center gap-1.5 shadow-md border ${
-                  isActive
-                    ? "bg-blue-600 border-blue-500 text-white shadow-blue-900/30"
-                    : fc.tab
-                }`}
+        {activeTab === "ideas" && (
+          <>
+            {/* Stats */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+              {[
+                { label: "Total Ideas",   value: total,       color: "text-white" },
+                { label: "Active",        value: activeCount, color: "text-[#0E90C8]" },
+                { label: "Done This Week",value: doneWeek,    color: "text-emerald-400" },
+                { label: "High Priority", value: highPri,     color: "text-orange-400" },
+              ].map(s => (
+                <div key={s.label} className="bg-white/5 border border-white/10 rounded-2xl p-4 text-center">
+                  <p className="text-white/40 text-xs mb-1 font-medium">{s.label}</p>
+                  <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Filters */}
+            <div className="flex flex-wrap gap-2 mb-4">
+              <select
+                value={statusFilter}
+                onChange={e => setStatusFilter(e.target.value)}
+                className={`${INPUT_CLS} bg-white/5 border-white/20 text-white/80`}
               >
-                {f.label}
-                {counts[f.key] > 0 && (
-                  <span className={`text-xs px-1.5 py-0.5 rounded-full ${isActive ? "bg-white/25 text-white" : fc.badge}`}>
-                    {counts[f.key]}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
+                <option value="all">All Status</option>
+                <option value="active">Active</option>
+                <option value="in_progress">In Progress</option>
+                <option value="completed">Completed</option>
+                <option value="parked">Parked</option>
+                <option value="abandoned">Abandoned</option>
+              </select>
+              <select
+                value={categoryFilter}
+                onChange={e => setCategoryFilter(e.target.value)}
+                className={`${INPUT_CLS} bg-white/5 border-white/20 text-white/80`}
+              >
+                <option value="all">All Categories</option>
+                <option value="business">Business</option>
+                <option value="product">Product</option>
+                <option value="personal">Personal</option>
+                <option value="research">Research</option>
+                <option value="strategy">Strategy</option>
+                <option value="other">Other</option>
+              </select>
+              <select
+                value={priorityFilter}
+                onChange={e => setPriorityFilter(e.target.value)}
+                className={`${INPUT_CLS} bg-white/5 border-white/20 text-white/80`}
+              >
+                <option value="all">All Priorities</option>
+                <option value="critical">Critical</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+              </select>
+              <input
+                type="text"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Search ideas..."
+                className={`${INPUT_CLS} bg-white/5 border-white/20 text-white placeholder-white/30 flex-1 min-w-[160px]`}
+              />
+            </div>
 
-        {/* Sort controls — solid white pills */}
-        <div className="flex items-center gap-2 mb-5">
-          <span className="text-xs text-blue-100/80 font-medium shrink-0 drop-shadow">Sort:</span>
-          {filter === "all" && (
-            <button onClick={() => setSortBy("status")} className={`text-xs px-3 py-1.5 rounded-lg border font-medium transition-all shadow-sm ${sortBy === "status" ? "bg-blue-600 border-blue-500 text-white" : "bg-white/95 border-white text-slate-600 hover:bg-white"}`}>
-              By Status
-            </button>
-          )}
-          <button onClick={() => setSortBy("date_desc")} className={`text-xs px-3 py-1.5 rounded-lg border font-medium transition-all shadow-sm ${sortBy === "date_desc" ? "bg-blue-600 border-blue-500 text-white" : "bg-white/95 border-white text-slate-600 hover:bg-white"}`}>
-            Newest First
-          </button>
-          <button onClick={() => setSortBy("date_asc")} className={`text-xs px-3 py-1.5 rounded-lg border font-medium transition-all shadow-sm ${sortBy === "date_asc" ? "bg-blue-600 border-blue-500 text-white" : "bg-white/95 border-white text-slate-600 hover:bg-white"}`}>
-            Oldest First
-          </button>
-        </div>
+            {/* Ideas table */}
+            <div className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden">
+              {visibleIdeas.length === 0 ? (
+                <div className="text-center text-white/30 py-16 text-sm">
+                  {ideas.length === 0
+                    ? "No ideas yet — send a message to Jarvis in Slack to capture your first idea."
+                    : "No ideas match the current filters."}
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-white/10">
+                        <th className="text-left px-4 py-3 text-white/40 font-medium text-xs uppercase tracking-wide">Idea</th>
+                        <th className="text-left px-4 py-3 text-white/40 font-medium text-xs uppercase tracking-wide hidden sm:table-cell">Category</th>
+                        <th className="text-left px-4 py-3 text-white/40 font-medium text-xs uppercase tracking-wide hidden md:table-cell">Priority</th>
+                        <th className="text-left px-4 py-3 text-white/40 font-medium text-xs uppercase tracking-wide">Status</th>
+                        <th className="text-left px-4 py-3 text-white/40 font-medium text-xs uppercase tracking-wide hidden lg:table-cell">Next Reminder</th>
+                        <th className="text-left px-4 py-3 text-white/40 font-medium text-xs uppercase tracking-wide hidden xl:table-cell">Created</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {visibleIdeas.map(idea => {
+                        const cfg = IDEA_STATUS[idea.status] ?? IDEA_STATUS.active;
+                        const priCfg = PRIORITY[idea.priority] ?? PRIORITY.medium;
+                        const nextReminder = idea.next_reminder_at && !idea.reminders_paused
+                          ? formatDateTime(idea.next_reminder_at)
+                          : idea.reminders_paused ? "Paused" : "—";
+                        return (
+                          <tr
+                            key={idea.id}
+                            onClick={() => setSelectedIdea(idea)}
+                            className="border-b border-white/5 hover:bg-white/5 cursor-pointer transition-colors"
+                          >
+                            <td className="px-4 py-3.5">
+                              <div className="flex items-start gap-2.5">
+                                <span className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${cfg.dot}`} />
+                                <span className="text-white font-medium leading-snug line-clamp-2">{idea.title}</span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3.5 hidden sm:table-cell">
+                              <span className="text-white/50 capitalize text-xs">{idea.category}</span>
+                            </td>
+                            <td className="px-4 py-3.5 hidden md:table-cell">
+                              <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${priCfg.cls}`}>{priCfg.label}</span>
+                            </td>
+                            <td className="px-4 py-3.5">
+                              <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full border ${cfg.badge}`}>{cfg.label}</span>
+                            </td>
+                            <td className="px-4 py-3.5 hidden lg:table-cell">
+                              <span className="text-white/40 text-xs">{nextReminder}</span>
+                            </td>
+                            <td className="px-4 py-3.5 hidden xl:table-cell">
+                              <span className="text-white/40 text-xs">{formatDate(idea.created_at)}</span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </>
+        )}
 
-        {/* Task list or employee view */}
-        {isEmployeeView ? (
-          <EmployeeView tasks={filteredTasks} expandedId={expandedId} onToggle={id => { const next = expandedId === id ? null : id; setExpandedId(next); if (next) markRead(next); }} onAction={handleAction} userMap={userMap} readState={readState} />
-        ) : (
-          <div className="space-y-3">
-            {visible.length === 0 && (
-              <div className={`text-center text-slate-500 py-16 ${CARD} rounded-2xl`}>
-                {filter === "all" ? "No tasks yet. Create one above!" : `No ${filter.replace(/_/g, " ")} tasks.`}
-              </div>
-            )}
-            {visible.map((task, i) => (
-              <div key={task.id} className="anim-rise" style={{ animationDelay: `${Math.min(i, 8) * 50}ms` }}>
-                <TaskCard
-                  task={task}
-                  expanded={expandedId === task.id}
-                  onToggle={() => { const next = expandedId === task.id ? null : task.id; setExpandedId(next); if (next) markRead(next); }}
-                  onAction={handleAction}
-                  userMap={userMap}
-                  accentColor={getEmployeeColor(task.assigned_to_name)}
-                  lastReadAt={readState[task.id]}
-                />
-              </div>
-            ))}
-          </div>
+        {activeTab === "team" && (
+          <>
+            <div className="mb-4 flex items-center justify-between">
+              <p className="text-white/50 text-sm">Read-only view of team tasks.</p>
+              <a href="https://fireside-trade.vercel.app/dashboard" target="_blank" rel="noopener noreferrer" className="text-[#0E90C8] text-xs hover:underline">
+                Open full team dashboard →
+              </a>
+            </div>
+            <div className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden">
+              {initialTeamTasks.length === 0 ? (
+                <div className="text-center text-white/30 py-16 text-sm">No team tasks found.</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-white/10">
+                        <th className="text-left px-4 py-3 text-white/40 font-medium text-xs uppercase tracking-wide">Task</th>
+                        <th className="text-left px-4 py-3 text-white/40 font-medium text-xs uppercase tracking-wide hidden sm:table-cell">Assignee</th>
+                        <th className="text-left px-4 py-3 text-white/40 font-medium text-xs uppercase tracking-wide">Status</th>
+                        <th className="text-left px-4 py-3 text-white/40 font-medium text-xs uppercase tracking-wide hidden md:table-cell">Follow-ups</th>
+                        <th className="text-left px-4 py-3 text-white/40 font-medium text-xs uppercase tracking-wide hidden lg:table-cell">Created</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(initialTeamTasks as TeamTask[]).map(task => {
+                        const statusCfg = TEAM_STATUS[task.status] ?? TEAM_STATUS.active;
+                        return (
+                          <tr key={task.id} className="border-b border-white/5">
+                            <td className="px-4 py-3.5">
+                              <div className="flex items-start gap-2.5">
+                                <span className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${statusCfg.dot}`} />
+                                <span className="text-white/80 leading-snug line-clamp-2">{task.task_text}</span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3.5 hidden sm:table-cell">
+                              <span className="text-white/50 text-xs">{task.assigned_to_name}</span>
+                            </td>
+                            <td className="px-4 py-3.5">
+                              <span className="text-white/60 text-xs">{statusCfg.label}</span>
+                            </td>
+                            <td className="px-4 py-3.5 hidden md:table-cell">
+                              <span className="text-white/40 text-xs">{task.followup_count}/{task.max_followups}</span>
+                            </td>
+                            <td className="px-4 py-3.5 hidden lg:table-cell">
+                              <span className="text-white/40 text-xs">{formatDate(task.created_at)}</span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </>
         )}
       </div>
     </main>
