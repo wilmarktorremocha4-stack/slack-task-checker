@@ -1,4 +1,10 @@
 {
+  "crons": [
+    {
+      "path": "/api/cron/followup",
+      "schedule": "*/15 * * * *"
+    }
+  ],
   "functions": {
     "app/api/cron/followup/route.ts": {
       "maxDuration": 60
