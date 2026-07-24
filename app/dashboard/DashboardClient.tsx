@@ -1024,9 +1024,7 @@ export default function DashboardClient({ initialTasks, userEmail }: {
   const visible = applySort(filteredTasks, sortBy);
 
   return (
-    <main className="min-h-screen relative text-white overflow-x-hidden">
-      {/* Fixed gradient background — stays put while the page scrolls */}
-      <div className="fixed inset-0 -z-10" style={{ background: GRADIENT_BG }} />
+    <main className="min-h-screen relative text-white overflow-x-hidden" style={{ background: GRADIENT_BG }}>
 
       <Toast toasts={toasts} />
       {newTaskOpen && (
