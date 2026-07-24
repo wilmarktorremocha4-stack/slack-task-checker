@@ -1039,24 +1039,60 @@ export default function DashboardClient({ initialTasks, userEmail }: {
       )}
 
       {/* Workspace tab switcher — fixed top bar, always on top */}
-      <div style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 100, height: 45, display: "flex", alignItems: "center", gap: 6, padding: "0 16px", background: "rgba(6,13,36,0.9)", backdropFilter: "blur(10px)", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
-        <button
-          onClick={() => setShowPersonal(false)}
-          style={{ padding: "5px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", border: showPersonal ? "1px solid rgba(255,255,255,0.15)" : "1px solid #3B82F6", background: showPersonal ? "transparent" : "#3B82F6", color: showPersonal ? "rgba(255,255,255,0.5)" : "#fff", transition: "all 0.15s" }}
-        >
-          Team Tasks
-        </button>
-        <button
-          onClick={() => setShowPersonal(true)}
-          style={{ padding: "5px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", border: showPersonal ? "1px solid #8B5CF6" : "1px solid rgba(255,255,255,0.15)", background: showPersonal ? "#8B5CF6" : "transparent", color: showPersonal ? "#fff" : "rgba(255,255,255,0.5)", transition: "all 0.15s" }}
-        >
-          My Space
-        </button>
+      <div className="ws-switcher-bar" style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 100, height: 64, display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(180deg, rgba(2,8,28,0.97) 0%, rgba(4,12,40,0.93) 100%)", backdropFilter: "blur(16px)", borderBottom: "1px solid rgba(0,180,255,0.12)" }}>
+        {/* Gradient outline pill wrapper */}
+        <div style={{ position: "relative", padding: 2, borderRadius: 18, background: "linear-gradient(135deg, #00e0ff, #0062ff, #7c3aed, #00e0ff)", backgroundSize: "300% 300%", animation: "neon-border-spin 4s linear infinite" }}>
+          <div style={{ display: "flex", borderRadius: 16, overflow: "hidden", background: "rgba(4,10,32,0.95)" }}>
+            <button
+              onClick={() => setShowPersonal(false)}
+              className={!showPersonal ? "ws-switcher-active" : ""}
+              style={{
+                padding: "10px 32px",
+                fontSize: 13,
+                fontWeight: 700,
+                letterSpacing: "0.04em",
+                cursor: "pointer",
+                border: "none",
+                borderRadius: 0,
+                background: !showPersonal
+                  ? "linear-gradient(135deg, rgba(0,149,255,0.35) 0%, rgba(0,80,200,0.25) 100%)"
+                  : "transparent",
+                color: !showPersonal ? "#e0f4ff" : "rgba(255,255,255,0.35)",
+                transition: "all 0.2s ease",
+                textShadow: !showPersonal ? "0 0 12px rgba(0,200,255,0.8)" : "none",
+              }}
+            >
+              Team Tasks
+            </button>
+            <div style={{ width: 1, background: "rgba(0,180,255,0.15)", margin: "8px 0" }} />
+            <button
+              onClick={() => setShowPersonal(true)}
+              className={showPersonal ? "ws-switcher-active" : ""}
+              style={{
+                padding: "10px 32px",
+                fontSize: 13,
+                fontWeight: 700,
+                letterSpacing: "0.04em",
+                cursor: "pointer",
+                border: "none",
+                borderRadius: 0,
+                background: showPersonal
+                  ? "linear-gradient(135deg, rgba(124,58,237,0.4) 0%, rgba(79,20,180,0.3) 100%)"
+                  : "transparent",
+                color: showPersonal ? "#e9d5ff" : "rgba(255,255,255,0.35)",
+                transition: "all 0.2s ease",
+                textShadow: showPersonal ? "0 0 12px rgba(180,100,255,0.8)" : "none",
+              }}
+            >
+              My Space
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Personal space — iframe fills screen below the fixed tab bar */}
       {showPersonal && (
-        <div style={{ position: "fixed", top: 45, left: 0, right: 0, bottom: 0, zIndex: 90 }}>
+        <div style={{ position: "fixed", top: 64, left: 0, right: 0, bottom: 0, zIndex: 90 }}>
           <iframe
             src={(() => {
               const base = process.env.NEXT_PUBLIC_PERSONAL_URL ?? "https://personal-slack.vercel.app/dashboard";
@@ -1070,7 +1106,7 @@ export default function DashboardClient({ initialTasks, userEmail }: {
         </div>
       )}
 
-      <div className="relative max-w-4xl mx-auto px-4 py-8" style={{ paddingTop: 60 }}>
+      <div className="relative max-w-4xl mx-auto px-4 py-8" style={{ paddingTop: 80 }}>
         {/* Header */}
         <div className="flex items-center justify-between mb-8 gap-3 flex-wrap">
           <div>

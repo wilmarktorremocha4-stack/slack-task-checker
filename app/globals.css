@@ -80,3 +80,33 @@ body {
 /* Hide scrollbar but keep scroll functionality */
 .hide-scrollbar::-webkit-scrollbar { display: none; }
 .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* ── Workspace switcher animations ── */
+@keyframes neon-border-spin {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes tab-glow-pulse {
+  0%, 100% { box-shadow: 0 0 8px 2px rgba(0,224,255,0.25), 0 0 24px 4px rgba(0,149,255,0.12); }
+  50%       { box-shadow: 0 0 16px 4px rgba(0,224,255,0.45), 0 0 40px 8px rgba(0,149,255,0.22); }
+}
+
+@keyframes switcher-rise {
+  from { opacity: 0; transform: translateY(-6px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.ws-switcher-active {
+  animation: tab-glow-pulse 2.5s ease-in-out infinite;
+}
+
+.ws-switcher-bar {
+  animation: switcher-rise 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ws-switcher-active { animation: none; }
+  .ws-switcher-bar    { animation: none; }
+}
