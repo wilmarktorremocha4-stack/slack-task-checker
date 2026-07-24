@@ -30,7 +30,6 @@ export const metadata: Metadata = {
     capable: true,
     statusBarStyle: "black-translucent",
     title: "Slack Tracker",
-    startupImage: "/apple-touch-icon.png",
   },
   icons: {
     icon: [
