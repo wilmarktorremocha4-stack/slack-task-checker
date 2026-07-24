@@ -915,6 +915,7 @@ export default function DashboardClient({ initialTasks, userEmail }: {
   const [users, setUsers] = useState<SlackUser[]>([]);
   const [userMap, setUserMap] = useState<Record<string, string>>({});
   const [readState, setReadState] = useState<Record<string, number>>({});
+  const [showPersonal, setShowPersonal] = useState(false);
   const toastIdRef = useRef(0);
 
   // Load read-state from localStorage on mount
@@ -1037,7 +1038,35 @@ export default function DashboardClient({ initialTasks, userEmail }: {
         />
       )}
 
-      <div className="relative max-w-4xl mx-auto px-4 py-8">
+      {/* Workspace tab switcher — fixed top bar, always on top */}
+      <div style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 100, height: 45, display: "flex", alignItems: "center", gap: 6, padding: "0 16px", background: "rgba(6,13,36,0.9)", backdropFilter: "blur(10px)", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+        <button
+          onClick={() => setShowPersonal(false)}
+          style={{ padding: "5px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", border: showPersonal ? "1px solid rgba(255,255,255,0.15)" : "1px solid #3B82F6", background: showPersonal ? "transparent" : "#3B82F6", color: showPersonal ? "rgba(255,255,255,0.5)" : "#fff", transition: "all 0.15s" }}
+        >
+          Team Tasks
+        </button>
+        <button
+          onClick={() => setShowPersonal(true)}
+          style={{ padding: "5px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", border: showPersonal ? "1px solid #8B5CF6" : "1px solid rgba(255,255,255,0.15)", background: showPersonal ? "#8B5CF6" : "transparent", color: showPersonal ? "#fff" : "rgba(255,255,255,0.5)", transition: "all 0.15s" }}
+        >
+          My Space
+        </button>
+      </div>
+
+      {/* Personal space — iframe fills screen below the fixed tab bar */}
+      {showPersonal && (
+        <div style={{ position: "fixed", top: 45, left: 0, right: 0, bottom: 0, zIndex: 90 }}>
+          <iframe
+            src={process.env.NEXT_PUBLIC_PERSONAL_URL ?? "https://personal-slack.vercel.app/dashboard"}
+            style={{ width: "100%", height: "100%", border: "none", display: "block" }}
+            allow="clipboard-write"
+            title="Brandon's Space"
+          />
+        </div>
+      )}
+
+      <div className="relative max-w-4xl mx-auto px-4 py-8" style={{ paddingTop: 60 }}>
         {/* Header */}
         <div className="flex items-center justify-between mb-8 gap-3 flex-wrap">
           <div>
