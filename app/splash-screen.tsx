@@ -25,7 +25,7 @@ export default function SplashScreen() {
         <div className="splash-ring splash-ring-1" />
         <div className="splash-ring splash-ring-2" />
         <img
-          src="/icon-512x512.png"
+          src="/splash-sphere.svg"
           alt=""
           className="splash-icon"
           draggable={false}
