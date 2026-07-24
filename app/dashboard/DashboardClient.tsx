@@ -356,10 +356,10 @@ function TaskCard({ task, expanded, onToggle, onAction, userMap, accentColor, la
           <p className="text-xs text-slate-400 mt-0.5">{formatDate(task.created_at)} · {timeAgo(task.created_at)}</p>
         </div>
 
-        <div className="text-right shrink-0 flex flex-col items-end gap-1">
+        <div className="text-right shrink-0 flex flex-col items-end gap-1 max-w-[120px] sm:max-w-none">
           <span className="text-xs text-slate-400">{task.followup_count}/{task.max_followups} follow-ups</span>
           {next && (
-            <span className={`text-xs font-medium ${next.isOverdue ? "text-rose-600" : "text-blue-600"}`}>
+            <span className={`text-xs font-medium leading-tight ${next.isOverdue ? "text-rose-600" : "text-blue-600"}`}>
               {next.label}
             </span>
           )}
@@ -700,8 +700,8 @@ function NewTaskModal({ onClose, onCreated, toast, initialUsers }: {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 flex items-start justify-center p-4 overflow-y-auto">
-      <div className={`${CARD} rounded-3xl w-full max-w-lg anim-pop my-4`}>
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 flex items-start justify-center overflow-y-auto" style={{ paddingTop: 72, paddingLeft: 16, paddingRight: 16, paddingBottom: 16 }}>
+      <div className={`${CARD} rounded-3xl w-full max-w-lg anim-pop mb-4`}>
         <div className="flex items-center justify-between p-6 border-b border-slate-200">
           <h2 className="text-lg font-semibold text-slate-900">Assign New Task</h2>
           <button onClick={onClose} className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-all hover:rotate-90 duration-200">
@@ -1039,17 +1039,17 @@ export default function DashboardClient({ initialTasks, userEmail }: {
       )}
 
       {/* Workspace tab switcher — fixed top bar, always on top */}
-      <div className="ws-switcher-bar" style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 100, height: 64, display: "flex", alignItems: "center", justifyContent: "center", gap: 12, background: "linear-gradient(180deg, rgba(2,8,28,0.97) 0%, rgba(4,12,40,0.93) 100%)", backdropFilter: "blur(16px)", borderBottom: "1px solid rgba(0,180,255,0.1)" }}>
+      <div className="ws-switcher-bar" style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 100, height: 56, display: "flex", alignItems: "center", justifyContent: "center", gap: 10, background: "linear-gradient(180deg, rgba(2,8,28,0.97) 0%, rgba(4,12,40,0.93) 100%)", backdropFilter: "blur(16px)", borderBottom: "1px solid rgba(0,180,255,0.1)" }}>
         {/* Team Tasks tab */}
         <button
           onClick={() => setShowPersonal(false)}
           className={!showPersonal ? "ws-tab ws-tab-active-team" : "ws-tab"}
           style={{
-            padding: "12px 36px",
-            borderRadius: 14,
-            fontSize: 14,
+            padding: "8px 20px",
+            borderRadius: 12,
+            fontSize: 13,
             fontWeight: 700,
-            letterSpacing: "0.05em",
+            letterSpacing: "0.04em",
             cursor: "pointer",
             background: "linear-gradient(135deg, rgba(0,100,255,0.4) 0%, rgba(0,40,160,0.5) 100%)",
             border: "1px solid rgba(0,180,255,0.6)",
@@ -1059,6 +1059,7 @@ export default function DashboardClient({ initialTasks, userEmail }: {
               ? "0 0 18px 4px rgba(0,160,255,0.45), inset 0 1px 0 rgba(255,255,255,0.08)"
               : "none",
             transition: "box-shadow 0.2s ease",
+            whiteSpace: "nowrap",
           }}
         >
           Team Tasks
@@ -1069,11 +1070,11 @@ export default function DashboardClient({ initialTasks, userEmail }: {
           onClick={() => setShowPersonal(true)}
           className={showPersonal ? "ws-tab ws-tab-active-personal" : "ws-tab"}
           style={{
-            padding: "12px 36px",
-            borderRadius: 14,
-            fontSize: 14,
+            padding: "8px 20px",
+            borderRadius: 12,
+            fontSize: 13,
             fontWeight: 700,
-            letterSpacing: "0.05em",
+            letterSpacing: "0.04em",
             cursor: "pointer",
             background: "linear-gradient(135deg, rgba(0,200,200,0.35) 0%, rgba(0,140,160,0.5) 100%)",
             border: "1px solid rgba(0,220,210,0.6)",
@@ -1083,6 +1084,7 @@ export default function DashboardClient({ initialTasks, userEmail }: {
               ? "0 0 18px 4px rgba(0,210,200,0.45), inset 0 1px 0 rgba(255,255,255,0.08)"
               : "none",
             transition: "box-shadow 0.2s ease",
+            whiteSpace: "nowrap",
           }}
         >
           My Space
@@ -1091,7 +1093,7 @@ export default function DashboardClient({ initialTasks, userEmail }: {
 
       {/* Personal space — iframe fills screen below the fixed tab bar */}
       {showPersonal && (
-        <div style={{ position: "fixed", top: 64, left: 0, right: 0, bottom: 0, zIndex: 90 }}>
+        <div style={{ position: "fixed", top: 56, left: 0, right: 0, bottom: 0, zIndex: 90 }}>
           <iframe
             src={(() => {
               const base = process.env.NEXT_PUBLIC_PERSONAL_URL ?? "https://personal-slack.vercel.app/dashboard";
@@ -1105,11 +1107,11 @@ export default function DashboardClient({ initialTasks, userEmail }: {
         </div>
       )}
 
-      <div className="relative max-w-4xl mx-auto px-4 py-8" style={{ paddingTop: 80 }}>
+      <div className="relative max-w-4xl mx-auto px-3 sm:px-4 py-4 sm:py-8" style={{ paddingTop: 68 }}>
         {/* Header */}
-        <div className="flex items-center justify-between mb-8 gap-3 flex-wrap">
+        <div className="flex items-center justify-between mb-5 sm:mb-8 gap-2 flex-wrap">
           <div>
-            <h1 className="text-4xl font-black tracking-tight leading-none text-white drop-shadow-md">
+            <h1 className="text-2xl sm:text-4xl font-black tracking-tight leading-none text-white drop-shadow-md">
               Task{" "}
               <span style={{ background: "linear-gradient(90deg, #7dd3fc, #bae6fd, #e0f2fe)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
                 Tracker
@@ -1120,14 +1122,14 @@ export default function DashboardClient({ initialTasks, userEmail }: {
               {userEmail && <span className="hidden sm:inline"> · {userEmail}</span>}
             </p>
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <button onClick={() => refresh()} disabled={refreshing} className={`inline-flex items-center gap-2 ${HEADER_BTN} font-medium text-sm px-4 py-2.5 rounded-xl transition-all disabled:opacity-60 active:scale-[0.98]`}>
+          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+            <button onClick={() => refresh()} disabled={refreshing} className={`inline-flex items-center gap-1.5 ${HEADER_BTN} font-medium text-sm px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl transition-all disabled:opacity-60 active:scale-[0.98]`}>
               <IconRefresh spinning={refreshing} />
               <span className="hidden sm:inline">{refreshing ? "Refreshing..." : "Refresh"}</span>
             </button>
             <button
               onClick={() => setIsEmployeeView(v => !v)}
-              className={`inline-flex items-center gap-2 font-medium text-sm px-4 py-2.5 rounded-xl transition-all active:scale-[0.98] shadow-lg ${
+              className={`inline-flex items-center gap-1.5 font-medium text-sm px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl transition-all active:scale-[0.98] shadow-lg ${
                 isEmployeeView
                   ? "bg-indigo-600 border border-indigo-500 text-white shadow-indigo-500/30"
                   : HEADER_BTN
@@ -1136,10 +1138,10 @@ export default function DashboardClient({ initialTasks, userEmail }: {
               <IconBarChart />
               <span className="hidden sm:inline">By Employee</span>
             </button>
-            <button onClick={() => setNewTaskOpen(true)} className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 border border-blue-500 hover:-translate-y-0.5 text-white font-semibold text-sm px-5 py-2.5 rounded-xl shadow-lg shadow-blue-900/40 transition-all active:scale-[0.98]">
-              <IconPlus /> New Task
+            <button onClick={() => setNewTaskOpen(true)} className="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 border border-blue-500 text-white font-semibold text-sm px-3 py-2 sm:px-5 sm:py-2.5 rounded-xl shadow-lg shadow-blue-900/40 transition-all active:scale-[0.98]">
+              <IconPlus /> <span>New Task</span>
             </button>
-            <button onClick={signOut} disabled={signingOut} className="inline-flex items-center gap-2 bg-white/95 border border-rose-300 hover:bg-rose-50 hover:border-rose-400 text-rose-500 hover:text-rose-600 font-medium text-sm px-3.5 py-2.5 rounded-xl shadow-lg transition-all disabled:opacity-60 active:scale-[0.98]">
+            <button onClick={signOut} disabled={signingOut} className="inline-flex items-center gap-1.5 bg-white/95 border border-rose-300 hover:bg-rose-50 text-rose-500 font-medium text-sm px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-xl shadow-lg transition-all disabled:opacity-60 active:scale-[0.98]">
               {signingOut ? <IconSpinner /> : <IconLogout />}
               <span className="hidden sm:inline">{signingOut ? "Signing out..." : "Sign out"}</span>
             </button>
@@ -1147,7 +1149,7 @@ export default function DashboardClient({ initialTasks, userEmail }: {
         </div>
 
         {/* Stats — solid white cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-4 sm:mb-6">
           {[
             { label: "Active",    count: counts.active,             color: "text-blue-600" },
             { label: "Revision",  count: counts.revision_requested, color: "text-orange-600" },
