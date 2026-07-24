@@ -1039,55 +1039,62 @@ export default function DashboardClient({ initialTasks, userEmail }: {
       )}
 
       {/* Workspace tab switcher — fixed top bar, always on top */}
-      <div className="ws-switcher-bar" style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 100, height: 64, display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(180deg, rgba(2,8,28,0.97) 0%, rgba(4,12,40,0.93) 100%)", backdropFilter: "blur(16px)", borderBottom: "1px solid rgba(0,180,255,0.12)" }}>
-        {/* Gradient outline pill wrapper */}
-        <div style={{ position: "relative", padding: 2, borderRadius: 18, background: "linear-gradient(135deg, #00e0ff, #0062ff, #7c3aed, #00e0ff)", backgroundSize: "300% 300%", animation: "neon-border-spin 4s linear infinite" }}>
-          <div style={{ display: "flex", borderRadius: 16, overflow: "hidden", background: "rgba(4,10,32,0.95)" }}>
-            <button
-              onClick={() => setShowPersonal(false)}
-              className={!showPersonal ? "ws-switcher-active" : ""}
-              style={{
-                padding: "10px 32px",
-                fontSize: 13,
-                fontWeight: 700,
-                letterSpacing: "0.04em",
-                cursor: "pointer",
-                border: "none",
-                borderRadius: 0,
-                background: !showPersonal
-                  ? "linear-gradient(135deg, rgba(0,149,255,0.35) 0%, rgba(0,80,200,0.25) 100%)"
-                  : "transparent",
-                color: !showPersonal ? "#e0f4ff" : "rgba(255,255,255,0.35)",
-                transition: "all 0.2s ease",
-                textShadow: !showPersonal ? "0 0 12px rgba(0,200,255,0.8)" : "none",
-              }}
-            >
-              Team Tasks
-            </button>
-            <div style={{ width: 1, background: "rgba(0,180,255,0.15)", margin: "8px 0" }} />
-            <button
-              onClick={() => setShowPersonal(true)}
-              className={showPersonal ? "ws-switcher-active" : ""}
-              style={{
-                padding: "10px 32px",
-                fontSize: 13,
-                fontWeight: 700,
-                letterSpacing: "0.04em",
-                cursor: "pointer",
-                border: "none",
-                borderRadius: 0,
-                background: showPersonal
-                  ? "linear-gradient(135deg, rgba(124,58,237,0.4) 0%, rgba(79,20,180,0.3) 100%)"
-                  : "transparent",
-                color: showPersonal ? "#e9d5ff" : "rgba(255,255,255,0.35)",
-                transition: "all 0.2s ease",
-                textShadow: showPersonal ? "0 0 12px rgba(180,100,255,0.8)" : "none",
-              }}
-            >
-              My Space
-            </button>
-          </div>
-        </div>
+      <div className="ws-switcher-bar" style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 100, height: 64, display: "flex", alignItems: "center", justifyContent: "center", gap: 12, background: "linear-gradient(180deg, rgba(2,8,28,0.97) 0%, rgba(4,12,40,0.93) 100%)", backdropFilter: "blur(16px)", borderBottom: "1px solid rgba(0,180,255,0.1)" }}>
+        {/* Team Tasks tab */}
+        <button
+          onClick={() => setShowPersonal(false)}
+          className={!showPersonal ? "ws-tab ws-tab-team ws-tab-active-team" : "ws-tab ws-tab-team"}
+          style={{
+            padding: "9px 28px",
+            borderRadius: 12,
+            fontSize: 13,
+            fontWeight: 700,
+            letterSpacing: "0.05em",
+            cursor: "pointer",
+            background: !showPersonal
+              ? "linear-gradient(135deg, rgba(0,100,255,0.45) 0%, rgba(0,40,160,0.55) 100%)"
+              : "rgba(0,40,120,0.2)",
+            border: !showPersonal
+              ? "1px solid rgba(0,180,255,0.7)"
+              : "1px solid rgba(0,120,200,0.25)",
+            color: !showPersonal ? "#a8e6ff" : "rgba(160,210,255,0.35)",
+            textShadow: !showPersonal ? "0 0 14px rgba(0,200,255,0.9)" : "none",
+            boxShadow: !showPersonal
+              ? "0 0 16px 2px rgba(0,160,255,0.35), inset 0 1px 0 rgba(255,255,255,0.08)"
+              : "none",
+            transition: "all 0.2s ease",
+          }}
+        >
+          Team Tasks
+        </button>
+
+        {/* My Space tab */}
+        <button
+          onClick={() => setShowPersonal(true)}
+          className={showPersonal ? "ws-tab ws-tab-personal ws-tab-active-personal" : "ws-tab ws-tab-personal"}
+          style={{
+            padding: "9px 28px",
+            borderRadius: 12,
+            fontSize: 13,
+            fontWeight: 700,
+            letterSpacing: "0.05em",
+            cursor: "pointer",
+            background: showPersonal
+              ? "linear-gradient(135deg, rgba(120,40,240,0.5) 0%, rgba(70,10,180,0.55) 100%)"
+              : "rgba(80,20,160,0.15)",
+            border: showPersonal
+              ? "1px solid rgba(180,100,255,0.7)"
+              : "1px solid rgba(120,60,220,0.25)",
+            color: showPersonal ? "#ddb8ff" : "rgba(200,160,255,0.35)",
+            textShadow: showPersonal ? "0 0 14px rgba(180,80,255,0.9)" : "none",
+            boxShadow: showPersonal
+              ? "0 0 16px 2px rgba(140,60,255,0.35), inset 0 1px 0 rgba(255,255,255,0.08)"
+              : "none",
+            transition: "all 0.2s ease",
+          }}
+        >
+          My Space
+        </button>
       </div>
 
       {/* Personal space — iframe fills screen below the fixed tab bar */}

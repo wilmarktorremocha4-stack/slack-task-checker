@@ -88,9 +88,14 @@ body {
   100% { background-position: 0% 50%; }
 }
 
-@keyframes tab-glow-pulse {
-  0%, 100% { box-shadow: 0 0 8px 2px rgba(0,224,255,0.25), 0 0 24px 4px rgba(0,149,255,0.12); }
-  50%       { box-shadow: 0 0 16px 4px rgba(0,224,255,0.45), 0 0 40px 8px rgba(0,149,255,0.22); }
+@keyframes tab-glow-pulse-team {
+  0%, 100% { box-shadow: 0 0 16px 2px rgba(0,160,255,0.35), inset 0 1px 0 rgba(255,255,255,0.08); }
+  50%       { box-shadow: 0 0 28px 6px rgba(0,200,255,0.55), inset 0 1px 0 rgba(255,255,255,0.12); }
+}
+
+@keyframes tab-glow-pulse-personal {
+  0%, 100% { box-shadow: 0 0 16px 2px rgba(140,60,255,0.35), inset 0 1px 0 rgba(255,255,255,0.08); }
+  50%       { box-shadow: 0 0 28px 6px rgba(180,80,255,0.55), inset 0 1px 0 rgba(255,255,255,0.12); }
 }
 
 @keyframes switcher-rise {
@@ -98,8 +103,30 @@ body {
   to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-.ws-switcher-active {
-  animation: tab-glow-pulse 2.5s ease-in-out infinite;
+.ws-tab {
+  outline: none;
+}
+
+.ws-tab-team:hover:not(.ws-tab-active-team) {
+  background: rgba(0,60,160,0.3) !important;
+  border-color: rgba(0,150,220,0.45) !important;
+  color: rgba(160,220,255,0.65) !important;
+  box-shadow: 0 0 10px 1px rgba(0,140,255,0.2) !important;
+}
+
+.ws-tab-personal:hover:not(.ws-tab-active-personal) {
+  background: rgba(80,20,180,0.25) !important;
+  border-color: rgba(150,70,240,0.45) !important;
+  color: rgba(200,160,255,0.65) !important;
+  box-shadow: 0 0 10px 1px rgba(140,60,255,0.2) !important;
+}
+
+.ws-tab-active-team {
+  animation: tab-glow-pulse-team 2.5s ease-in-out infinite;
+}
+
+.ws-tab-active-personal {
+  animation: tab-glow-pulse-personal 2.5s ease-in-out infinite;
 }
 
 .ws-switcher-bar {
@@ -107,6 +134,5 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ws-switcher-active { animation: none; }
-  .ws-switcher-bar    { animation: none; }
+  .ws-tab-active-team, .ws-tab-active-personal, .ws-switcher-bar { animation: none; }
 }
