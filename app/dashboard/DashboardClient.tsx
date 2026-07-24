@@ -1043,26 +1043,22 @@ export default function DashboardClient({ initialTasks, userEmail }: {
         {/* Team Tasks tab */}
         <button
           onClick={() => setShowPersonal(false)}
-          className={!showPersonal ? "ws-tab ws-tab-team ws-tab-active-team" : "ws-tab ws-tab-team"}
+          className={!showPersonal ? "ws-tab ws-tab-active-team" : "ws-tab"}
           style={{
-            padding: "9px 28px",
-            borderRadius: 12,
-            fontSize: 13,
+            padding: "12px 36px",
+            borderRadius: 14,
+            fontSize: 14,
             fontWeight: 700,
             letterSpacing: "0.05em",
             cursor: "pointer",
-            background: !showPersonal
-              ? "linear-gradient(135deg, rgba(0,100,255,0.45) 0%, rgba(0,40,160,0.55) 100%)"
-              : "rgba(0,40,120,0.2)",
-            border: !showPersonal
-              ? "1px solid rgba(0,180,255,0.7)"
-              : "1px solid rgba(0,120,200,0.25)",
-            color: !showPersonal ? "#a8e6ff" : "rgba(160,210,255,0.35)",
-            textShadow: !showPersonal ? "0 0 14px rgba(0,200,255,0.9)" : "none",
+            background: "linear-gradient(135deg, rgba(0,100,255,0.4) 0%, rgba(0,40,160,0.5) 100%)",
+            border: "1px solid rgba(0,180,255,0.6)",
+            color: "#a8e6ff",
+            textShadow: "0 0 10px rgba(0,200,255,0.6)",
             boxShadow: !showPersonal
-              ? "0 0 16px 2px rgba(0,160,255,0.35), inset 0 1px 0 rgba(255,255,255,0.08)"
+              ? "0 0 18px 4px rgba(0,160,255,0.45), inset 0 1px 0 rgba(255,255,255,0.08)"
               : "none",
-            transition: "all 0.2s ease",
+            transition: "box-shadow 0.2s ease",
           }}
         >
           Team Tasks
@@ -1071,26 +1067,22 @@ export default function DashboardClient({ initialTasks, userEmail }: {
         {/* My Space tab */}
         <button
           onClick={() => setShowPersonal(true)}
-          className={showPersonal ? "ws-tab ws-tab-personal ws-tab-active-personal" : "ws-tab ws-tab-personal"}
+          className={showPersonal ? "ws-tab ws-tab-active-personal" : "ws-tab"}
           style={{
-            padding: "9px 28px",
-            borderRadius: 12,
-            fontSize: 13,
+            padding: "12px 36px",
+            borderRadius: 14,
+            fontSize: 14,
             fontWeight: 700,
             letterSpacing: "0.05em",
             cursor: "pointer",
-            background: showPersonal
-              ? "linear-gradient(135deg, rgba(120,40,240,0.5) 0%, rgba(70,10,180,0.55) 100%)"
-              : "rgba(80,20,160,0.15)",
-            border: showPersonal
-              ? "1px solid rgba(180,100,255,0.7)"
-              : "1px solid rgba(120,60,220,0.25)",
-            color: showPersonal ? "#ddb8ff" : "rgba(200,160,255,0.35)",
-            textShadow: showPersonal ? "0 0 14px rgba(180,80,255,0.9)" : "none",
+            background: "linear-gradient(135deg, rgba(255,100,0,0.4) 0%, rgba(200,50,0,0.5) 100%)",
+            border: "1px solid rgba(255,140,0,0.6)",
+            color: "#ffd0a0",
+            textShadow: "0 0 10px rgba(255,140,0,0.6)",
             boxShadow: showPersonal
-              ? "0 0 16px 2px rgba(140,60,255,0.35), inset 0 1px 0 rgba(255,255,255,0.08)"
+              ? "0 0 18px 4px rgba(255,120,0,0.45), inset 0 1px 0 rgba(255,255,255,0.08)"
               : "none",
-            transition: "all 0.2s ease",
+            transition: "box-shadow 0.2s ease",
           }}
         >
           My Space
