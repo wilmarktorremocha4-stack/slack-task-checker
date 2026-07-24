@@ -34,7 +34,6 @@ export default function SplashScreen() {
 
       {/* Text */}
       <p className="splash-title">Slack Tracker</p>
-      <p className="splash-sub">Operation AMZ</p>
 
       {/* Bottom dots loader */}
       <div className="splash-dots">

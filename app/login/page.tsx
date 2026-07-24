@@ -117,8 +117,7 @@ function LoginForm() {
   };
 
   return (
-    <main className="min-h-screen relative flex items-center justify-center p-4 overflow-hidden">
-      <div className="fixed inset-0 -z-10" style={{ background: GRADIENT_BG }} />
+    <main className="min-h-screen relative flex items-center justify-center p-4 overflow-hidden" style={{ background: GRADIENT_BG }}>
 
       <div className="relative w-full max-w-md anim-pop">
         {/* Brand */}
