@@ -1058,7 +1058,11 @@ export default function DashboardClient({ initialTasks, userEmail }: {
       {showPersonal && (
         <div style={{ position: "fixed", top: 45, left: 0, right: 0, bottom: 0, zIndex: 90 }}>
           <iframe
-            src={process.env.NEXT_PUBLIC_PERSONAL_URL ?? "https://personal-slack.vercel.app/dashboard"}
+            src={(() => {
+              const base = process.env.NEXT_PUBLIC_PERSONAL_URL ?? "https://personal-slack.vercel.app/dashboard";
+              const code = process.env.NEXT_PUBLIC_PERSONAL_ACCESS_CODE;
+              return code ? `${base}?code=${encodeURIComponent(code)}` : base;
+            })()}
             style={{ width: "100%", height: "100%", border: "none", display: "block" }}
             allow="clipboard-write"
             title="Brandon's Space"
