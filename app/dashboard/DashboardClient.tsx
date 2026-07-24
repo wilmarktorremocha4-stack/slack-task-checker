@@ -1099,7 +1099,7 @@ export default function DashboardClient({ initialTasks, userEmail }: {
               return code ? `${base}?code=${encodeURIComponent(code)}` : base;
             })()}
             style={{ width: "100%", height: "100%", border: "none", display: "block" }}
-            allow="clipboard-write"
+            allow="microphone; clipboard-write"
             title="Brandon's Space"
           />
         </div>
