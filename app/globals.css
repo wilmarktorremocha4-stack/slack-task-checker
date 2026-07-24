@@ -95,6 +95,159 @@ button {
 .hide-scrollbar::-webkit-scrollbar { display: none; }
 .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
+/* ── Splash screen ── */
+
+.splash-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  background: radial-gradient(ellipse at 40% 40%, #0d1f3c 0%, #060d1e 55%, #020810 100%);
+  transition: opacity 0.6s ease, transform 0.6s ease;
+}
+
+.splash-out {
+  opacity: 0;
+  transform: scale(1.04);
+  pointer-events: none;
+}
+
+/* Animated scanning line */
+@keyframes scan-line {
+  0%   { top: 0%; opacity: 0.6; }
+  50%  { opacity: 0.3; }
+  100% { top: 100%; opacity: 0; }
+}
+
+.splash-scan {
+  position: absolute;
+  left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #00d4ff 40%, #00d4ff 60%, transparent);
+  animation: scan-line 1.8s cubic-bezier(0.4, 0, 0.6, 1) 0.2s both;
+  pointer-events: none;
+  box-shadow: 0 0 16px 4px #00aaff;
+}
+
+/* Sphere wrapper */
+.splash-sphere-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 28px;
+}
+
+/* Expanding rings behind the sphere */
+@keyframes ring-expand {
+  0%   { transform: scale(0.6); opacity: 0.7; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+
+.splash-ring {
+  position: absolute;
+  width: 160px;
+  height: 160px;
+  border-radius: 50%;
+  border: 1.5px solid #00aaff;
+  pointer-events: none;
+}
+
+.splash-ring-1 {
+  animation: ring-expand 1.6s cubic-bezier(0.2, 0, 0.8, 1) 0.3s both;
+}
+
+.splash-ring-2 {
+  animation: ring-expand 1.6s cubic-bezier(0.2, 0, 0.8, 1) 0.7s both;
+  border-color: #00ccff;
+}
+
+/* Sphere icon */
+@keyframes sphere-in {
+  0%   { opacity: 0; transform: scale(0.45) rotate(-15deg); filter: brightness(0.2) blur(8px); }
+  55%  { opacity: 1; transform: scale(1.08) rotate(3deg);  filter: brightness(1.6) blur(0); }
+  75%  { transform: scale(0.96) rotate(-1deg); filter: brightness(1.1); }
+  88%  { transform: scale(1.03); }
+  100% { transform: scale(1) rotate(0deg); filter: brightness(1); }
+}
+
+@keyframes sphere-glow {
+  0%, 100% { filter: drop-shadow(0 0 12px #00c8ff) drop-shadow(0 0 30px rgba(0,120,255,0.5)); }
+  50%       { filter: drop-shadow(0 0 24px #00f0ff) drop-shadow(0 0 60px rgba(0,160,255,0.7)); }
+}
+
+.splash-icon {
+  width: 160px;
+  height: 160px;
+  display: block;
+  animation:
+    sphere-in 0.9s cubic-bezier(0.22, 1, 0.36, 1) both,
+    sphere-glow 2s ease-in-out 0.9s infinite;
+  user-select: none;
+}
+
+/* Title */
+@keyframes text-in {
+  from { opacity: 0; transform: translateY(14px); letter-spacing: 0.25em; }
+  to   { opacity: 1; transform: translateY(0);    letter-spacing: 0.10em; }
+}
+
+.splash-title {
+  color: #a0e8ff;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  text-shadow: 0 0 24px rgba(0,210,255,0.8), 0 0 60px rgba(0,120,255,0.4);
+  animation: text-in 0.7s cubic-bezier(0.22, 1, 0.36, 1) 0.55s both;
+  margin: 0;
+}
+
+.splash-sub {
+  color: rgba(140, 210, 255, 0.45);
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  margin: 8px 0 0 0;
+  animation: text-in 0.6s cubic-bezier(0.22, 1, 0.36, 1) 0.75s both;
+}
+
+/* Loading dots */
+@keyframes dot-pulse {
+  0%, 80%, 100% { transform: scale(0.6); opacity: 0.3; }
+  40%            { transform: scale(1);   opacity: 1; }
+}
+
+.splash-dots {
+  display: flex;
+  gap: 7px;
+  margin-top: 32px;
+  animation: text-in 0.5s ease 1s both;
+}
+
+.splash-dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #00aaff;
+  box-shadow: 0 0 8px #00aaff;
+  animation: dot-pulse 1.2s ease-in-out infinite;
+}
+
+.splash-dots span:nth-child(2) { animation-delay: 0.2s; }
+.splash-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .splash-scan, .splash-ring-1, .splash-ring-2,
+  .splash-icon, .splash-title, .splash-sub, .splash-dots { animation: none; }
+  .splash-icon { opacity: 1; }
+  .splash-title, .splash-sub { opacity: 1; }
+}
+
 /* ── Workspace switcher animations ── */
 @keyframes neon-border-spin {
   0%   { background-position: 0% 50%; }
