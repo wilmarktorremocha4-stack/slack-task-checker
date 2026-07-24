@@ -1075,12 +1075,12 @@ export default function DashboardClient({ initialTasks, userEmail }: {
             fontWeight: 700,
             letterSpacing: "0.05em",
             cursor: "pointer",
-            background: "linear-gradient(135deg, rgba(255,100,0,0.4) 0%, rgba(200,50,0,0.5) 100%)",
-            border: "1px solid rgba(255,140,0,0.6)",
-            color: "#ffd0a0",
-            textShadow: "0 0 10px rgba(255,140,0,0.6)",
+            background: "linear-gradient(135deg, rgba(0,200,200,0.35) 0%, rgba(0,140,160,0.5) 100%)",
+            border: "1px solid rgba(0,220,210,0.6)",
+            color: "#a0f0f0",
+            textShadow: "0 0 10px rgba(0,220,210,0.7)",
             boxShadow: showPersonal
-              ? "0 0 18px 4px rgba(255,120,0,0.45), inset 0 1px 0 rgba(255,255,255,0.08)"
+              ? "0 0 18px 4px rgba(0,210,200,0.45), inset 0 1px 0 rgba(255,255,255,0.08)"
               : "none",
             transition: "box-shadow 0.2s ease",
           }}
