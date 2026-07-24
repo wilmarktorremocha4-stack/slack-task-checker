@@ -22,13 +22,13 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "Task Tracker — Operation AMZ",
+  title: "Slack Tracker",
   description: "Slack task assignment, follow-ups, and review workflow",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Task Tracker",
+    title: "Slack Tracker",
     startupImage: "/apple-touch-icon.png",
   },
   icons: {

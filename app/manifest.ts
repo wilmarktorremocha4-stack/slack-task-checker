@@ -2,8 +2,8 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Task Tracker — Operation AMZ",
-    short_name: "Task Tracker",
+    name: "Slack Tracker",
+    short_name: "Slack Tracker",
     description: "Slack task assignment, follow-ups, and review workflow",
     start_url: "/dashboard",
     display: "standalone",
