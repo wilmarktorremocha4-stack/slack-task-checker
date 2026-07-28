@@ -126,13 +126,30 @@ export async function GET(request: Request) {
     blocks.push({ type: "divider" });
   }
 
+  const fallbackText = `📅 Weekly Digest (${dateRange}): ${done.length} done · ${active.length} active · ${revision.length} revision · ${cancelled.length} cancelled`;
+
   try {
     const slack = getSlackClient();
-    await slack.chat.postMessage({
+    const result = await slack.chat.postMessage({
       channel: channelId,
-      text: `📅 Weekly Digest (${dateRange}): ${done.length} done · ${active.length} active · ${revision.length} revision · ${cancelled.length} cancelled`,
+      text: fallbackText,
       blocks,
     });
+
+    await supabase.from("digest_logs").insert({
+      triggered_by: "cron",
+      date_range_start: weekAgo.toISOString(),
+      date_range_end: now.toISOString(),
+      total_tasks: total,
+      done_count: done.length,
+      active_count: active.length,
+      revision_count: revision.length,
+      cancelled_count: cancelled.length,
+      completion_pct: pct,
+      slack_message_ts: result.ts ?? null,
+      message_preview: fallbackText.slice(0, 300),
+    });
+
     return NextResponse.json({
       ok: true,
       period: dateRange,

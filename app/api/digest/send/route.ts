@@ -112,14 +112,30 @@ export async function POST() {
   }
 
   const channelId = process.env.SLACK_CHANNEL_ID ?? "C070RSAKTTN";
+  const fallbackText = `📅 Weekly Digest (${dateRange}): ${done.length} done · ${active.length} active · ${revision.length} revision · ${cancelled.length} cancelled`;
 
   try {
     const slack = getSlackClient();
-    await slack.chat.postMessage({
+    const result = await slack.chat.postMessage({
       channel: channelId,
-      text: `📅 Weekly Digest (${dateRange}): ${done.length} done · ${active.length} active · ${revision.length} revision · ${cancelled.length} cancelled`,
+      text: fallbackText,
       blocks,
     });
+
+    await supabase.from("digest_logs").insert({
+      triggered_by: "manual",
+      date_range_start: weekAgo.toISOString(),
+      date_range_end: now.toISOString(),
+      total_tasks: total,
+      done_count: done.length,
+      active_count: active.length,
+      revision_count: revision.length,
+      cancelled_count: cancelled.length,
+      completion_pct: pct,
+      slack_message_ts: result.ts ?? null,
+      message_preview: fallbackText.slice(0, 300),
+    });
+
     return NextResponse.json({ ok: true, total, done: done.length, active: active.length });
   } catch (err) {
     console.error("[digest/send] Slack post failed:", err);
