@@ -126,23 +126,6 @@ export async function GET(request: Request) {
     blocks.push({ type: "divider" });
   }
 
-  const appUrl =
-    process.env.NEXT_PUBLIC_APP_URL ??
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "https://slack-task-checker.vercel.app") +
-      "/dashboard";
-
-  blocks.push({
-    type: "actions",
-    elements: [
-      {
-        type: "button",
-        text: { type: "plain_text", text: "🔗 Open Dashboard" },
-        url: appUrl,
-        style: "primary",
-      },
-    ],
-  });
-
   try {
     const slack = getSlackClient();
     await slack.chat.postMessage({
