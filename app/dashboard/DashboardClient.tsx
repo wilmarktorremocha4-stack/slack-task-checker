@@ -911,6 +911,7 @@ export default function DashboardClient({ initialTasks, userEmail }: {
   const [lastRefresh, setLastRefresh] = useState(new Date());
   const [refreshing, setRefreshing] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  const [sendingDigest, setSendingDigest] = useState(false);
   const [toasts, setToasts] = useState<ToastType[]>([]);
   const [users, setUsers] = useState<SlackUser[]>([]);
   const [userMap, setUserMap] = useState<Record<string, string>>({});
@@ -970,6 +971,20 @@ export default function DashboardClient({ initialTasks, userEmail }: {
     const timer = setInterval(() => refresh({ silent: true }), 30_000);
     return () => clearInterval(timer);
   }, [refresh]);
+
+  async function sendDigest() {
+    setSendingDigest(true);
+    try {
+      const res = await fetch("/api/digest/send", { method: "POST" });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Failed");
+      addToast(`📅 Weekly digest sent to Slack! (${json.done} done · ${json.active} active)`, true);
+    } catch {
+      addToast("Failed to send digest — please try again", false);
+    } finally {
+      setSendingDigest(false);
+    }
+  }
 
   async function signOut() {
     setSigningOut(true);
@@ -1135,6 +1150,10 @@ export default function DashboardClient({ initialTasks, userEmail }: {
             >
               <IconBarChart />
               <span className="hidden sm:inline">By Employee</span>
+            </button>
+            <button onClick={sendDigest} disabled={sendingDigest} className={`inline-flex items-center gap-1.5 ${HEADER_BTN} font-medium text-sm px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl transition-all disabled:opacity-60 active:scale-[0.98]`}>
+              {sendingDigest ? <IconSpinner /> : <span>📊</span>}
+              <span className="hidden sm:inline">{sendingDigest ? "Sending..." : "Send Digest"}</span>
             </button>
             <button onClick={() => setNewTaskOpen(true)} className="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 border border-blue-500 text-white font-semibold text-sm px-3 py-2 sm:px-5 sm:py-2.5 rounded-xl shadow-lg shadow-blue-900/40 transition-all active:scale-[0.98]">
               <IconPlus /> <span>New Task</span>
