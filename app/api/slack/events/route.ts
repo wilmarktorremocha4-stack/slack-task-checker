@@ -69,7 +69,7 @@ async function processSlackEvent(event: Record<string, unknown>) {
     return;
   }
 
-  if (event.type === "message" && event.thread_ts && event.thread_ts !== event.ts && !event.bot_id) {
+  if (event.type === "message" && !event.subtype && event.thread_ts && event.thread_ts !== event.ts && !event.bot_id) {
     console.log("[slack] → thread reply");
     await handleThreadReply(event, supabase);
     return;
@@ -153,6 +153,8 @@ async function handleNewTaskMention(
       raw_message: messageText,
       assigned_to_id: assigneeId,
       assigned_to_name: assigneeName,
+      assignee_ids: [assigneeId],
+      assignee_names: [assigneeName],
       assigned_by_id: senderId,
       assigned_by_name: assignerName,
       channel_id: channelId,
