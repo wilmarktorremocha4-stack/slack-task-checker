@@ -31,7 +31,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
   const { id } = await params;
   const supabase = createSupabaseAdmin();
   const { action, content } = (await request.json()) as {
-    action: "approve" | "cancel" | "followup_now" | "reopen";
+    action: "approve" | "cancel" | "followup_now" | "reopen" | "complete";
     content?: string;
   };
 
@@ -141,6 +141,32 @@ export async function PATCH(request: Request, { params }: RouteContext) {
       author_type: "system",
       author_name: "System",
       content: `Task reopened by ${task.assigned_by_name}. Follow-up schedule restarted.`,
+      sent_to_slack: true,
+    });
+  } else if (action === "complete") {
+    if (task.status === "completed") {
+      return NextResponse.json({ error: "Task is already completed" }, { status: 409 });
+    }
+
+    const assigneeIds: string[] = task.assignee_ids?.length ? task.assignee_ids : [task.assigned_to_id];
+    const mentions = assigneeIds.map((uid: string) => slackMention(uid)).join(" ");
+
+    await supabase
+      .from("tasks")
+      .update({ status: "completed", completed_at: new Date().toISOString(), next_followup_at: null })
+      .eq("id", id);
+
+    await postThreadReply(
+      task.channel_id,
+      task.thread_ts,
+      `✅ ${mentions} ${task.assigned_by_name} has marked this task as completed. Thank you!`
+    );
+
+    await supabase.from("task_comments").insert({
+      task_id: id,
+      author_type: "system",
+      author_name: "System",
+      content: `Task manually marked as done by ${task.assigned_by_name}.`,
       sent_to_slack: true,
     });
   } else if (action === "followup_now") {

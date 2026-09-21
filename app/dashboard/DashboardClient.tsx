@@ -9,7 +9,7 @@ import type { Task, TaskComment } from "@/lib/supabase";
 type TaskWithComments = Task & { task_comments: TaskComment[] };
 type SlackUser = { id: string; name: string };
 type ToastType = { id: number; message: string; ok: boolean };
-type TaskAction = "approve" | "cancel" | "revision" | "followup_now" | "reopen" | "message";
+type TaskAction = "approve" | "cancel" | "revision" | "followup_now" | "reopen" | "message" | "complete";
 type SortBy = "status" | "date_desc" | "date_asc";
 
 const GRADIENT_BG = "linear-gradient(180deg, #060d24 0%, #0d2f7a 28%, #1565c0 56%, #1e88e5 76%, #42a5f5 100%)";
@@ -268,7 +268,7 @@ function TaskCard({ task, expanded, onToggle, onAction, userMap, accentColor, la
   const [revisionText, setRevisionText] = useState("");
   const [messageText, setMessageText] = useState("");
   const [working, setWorking] = useState<string | null>(null);
-  const [confirm, setConfirm] = useState<"cancel" | "followup_now" | "reopen" | null>(null);
+  const [confirm, setConfirm] = useState<"cancel" | "followup_now" | "reopen" | "complete" | null>(null);
   const threadRef = useRef<HTMLDivElement>(null);
   const cfg = STATUS[task.status as keyof typeof STATUS] ?? STATUS.active;
   const isOpen = task.status === "active" || task.status === "revision_requested";
@@ -319,6 +319,9 @@ function TaskCard({ task, expanded, onToggle, onAction, userMap, accentColor, la
       )}
       {confirm === "reopen" && (
         <ConfirmDialog title="Reopen this task?" body={`${assigneeDisplay} will be notified in Slack that the task is active again, and the follow-up schedule will restart.`} confirmLabel="Yes, reopen task" onConfirm={() => handle("reopen")} onClose={() => setConfirm(null)} />
+      )}
+      {confirm === "complete" && (
+        <ConfirmDialog title="Mark this task as done?" body={`This will mark the task as completed and notify ${assigneeDisplay} in Slack. Use this to manually close tasks that were completed outside of Slack replies.`} confirmLabel="Yes, mark as done" onConfirm={() => handle("complete")} onClose={() => setConfirm(null)} />
       )}
       {confirm === "followup_now" && (
         <ConfirmDialog
@@ -430,9 +433,16 @@ function TaskCard({ task, expanded, onToggle, onAction, userMap, accentColor, la
 
           {/* Closed task actions */}
           {isClosed && (
-            <button disabled={!!working} onClick={() => setConfirm("reopen")} className="w-full inline-flex items-center justify-center gap-2 bg-white border border-blue-300 hover:bg-blue-50 text-blue-600 font-medium text-sm py-2.5 rounded-xl transition-all disabled:opacity-50 active:scale-[0.98]">
-              <IconRefresh spinning={working === "reopen"} /> {working === "reopen" ? "Reopening..." : "Reopen Task"}
-            </button>
+            <div className="flex gap-3">
+              {task.status === "escalated" && (
+                <button disabled={!!working} onClick={() => setConfirm("complete")} className="flex-1 inline-flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 hover:-translate-y-0.5 disabled:opacity-50 text-white font-semibold text-sm py-2.5 rounded-xl shadow-lg shadow-emerald-500/25 transition-all active:scale-[0.98]">
+                  <IconCheck /> {working === "complete" ? "Marking done..." : "Mark as Done"}
+                </button>
+              )}
+              <button disabled={!!working} onClick={() => setConfirm("reopen")} className="flex-1 inline-flex items-center justify-center gap-2 bg-white border border-blue-300 hover:bg-blue-50 text-blue-600 font-medium text-sm py-2.5 rounded-xl transition-all disabled:opacity-50 active:scale-[0.98]">
+                <IconRefresh spinning={working === "reopen"} /> {working === "reopen" ? "Reopening..." : "Reopen Task"}
+              </button>
+            </div>
           )}
         </div>
       )}
@@ -1017,6 +1027,7 @@ export default function DashboardClient({ initialTasks, userEmail }: {
           followup_now: "Follow-up sent to Slack",
           reopen: "Task reopened — assignee notified in Slack",
           message: "Message sent to the Slack thread",
+          complete: "Task marked as done — assignee notified in Slack",
         };
         addToast(msgs[action], true);
         await refresh({ silent: true });
