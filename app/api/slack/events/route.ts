@@ -195,15 +195,27 @@ async function handleThreadReply(
 
   console.log("[reply] looking up task for thread_ts:", threadTs, "userId:", userId);
 
-  // Match the task for this thread regardless of status, so late replies,
-  // questions, and mistakes still show up on the dashboard timeline
-  const { data: task } = await supabase
+  // For multi-assignee threads (same thread_ts), find the task belonging to
+  // the replying user first, then fall back to any task in the thread.
+  let { data: task } = await supabase
     .from("tasks")
     .select("*")
     .eq("thread_ts", threadTs)
+    .eq("assigned_to_id", userId)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
+
+  if (!task) {
+    const { data: fallback } = await supabase
+      .from("tasks")
+      .select("*")
+      .eq("thread_ts", threadTs)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    task = fallback;
+  }
 
   if (!task) {
     console.log("[reply] no task found for this thread");
