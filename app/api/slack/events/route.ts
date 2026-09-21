@@ -648,9 +648,9 @@ async function handleThreadReply(
   // Check across ALL thread rows so multi-assignee tasks work correctly
   const isAssignee = allThreadTasks.some(
     t => (t.assigned_to_id === userId || t.assignee_ids?.includes(userId)) &&
-         (t.status === "active" || t.status === "revision_requested")
+         (t.status === "active" || t.status === "revision_requested" || t.status === "escalated")
   );
-  const isOpen = allThreadTasks.some(t => t.status === "active" || t.status === "revision_requested");
+  const isOpen = allThreadTasks.some(t => t.status === "active" || t.status === "revision_requested" || t.status === "escalated");
 
   // Closed tasks: just log the reply for dashboard visibility
   if (!isOpen) {
@@ -674,7 +674,7 @@ async function handleThreadReply(
     const taskIndex = parseInt(taskNumberMatch[1]) - 1;
     const myTasks = allThreadTasks.filter(
       (t) => (t.assignee_ids?.includes(userId) || t.assigned_to_id === userId) &&
-             t.status !== "cancelled" && t.status !== "escalated"
+             t.status !== "cancelled"
     );
     const targetTask = myTasks[taskIndex];
     if (!targetTask) {
@@ -735,7 +735,7 @@ async function handleThreadReply(
     // Check how many active tasks this user has in this thread
     const myActiveTasks = allThreadTasks.filter(
       (t) => (t.assignee_ids?.includes(userId) || t.assigned_to_id === userId) &&
-              (t.status === "active" || t.status === "revision_requested")
+              (t.status === "active" || t.status === "revision_requested" || t.status === "escalated")
     );
 
     if (myActiveTasks.length > 1) {
@@ -880,7 +880,7 @@ async function handleBotMentionInThread(
   // Active tasks for command context (reassign, add, etc.) — completed tasks are excluded
   // so they are never re-cancelled by remove/reassign/cancel operations.
   const activeThreadTasks = threadTasks.filter(
-    (t) => t.status === "active" || t.status === "revision_requested"
+    (t) => t.status === "active" || t.status === "revision_requested" || t.status === "escalated"
   );
 
   const teamMembers = await getWorkspaceMembers();
