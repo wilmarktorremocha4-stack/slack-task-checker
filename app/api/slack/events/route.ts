@@ -718,12 +718,51 @@ async function handleThreadReply(
     }
   }
 
-  // Only assignees can mark a task done; non-assignees (Brandon, others) are always just conversation
+  // Managers (Brandon + assistant) can mark any task done from Slack
+  const managerIds = [
+    process.env.SLACK_BRANDON_USER_ID,
+    ...(process.env.SLACK_MANAGER_USER_IDS ?? "").split(",").map(s => s.trim()),
+  ].filter(Boolean) as string[];
+  const isManager = managerIds.includes(userId);
+
+  const doneKeywords = /\b(done|completed|finished|complete|all done|sorted|submitted|sent|delivered|wrapped up|good to go|ready|all set|handled|accomplished)\b/;
+
+  // If manager says "done" — mark all open tasks in this thread as completed
+  if (isManager && doneKeywords.test(messageText)) {
+    const openTasks = allThreadTasks.filter(
+      t => t.status === "active" || t.status === "revision_requested" || t.status === "escalated"
+    );
+    if (openTasks.length > 0) {
+      const isDone = await classifyCompletionIntent(rawText, openTasks[0].task_text);
+      if (isDone) {
+        for (const t of openTasks) {
+          await supabase
+            .from("tasks")
+            .update({ status: "completed", completed_at: new Date().toISOString(), next_followup_at: null })
+            .eq("id", t.id);
+          await supabase.from("task_comments").insert({
+            task_id: t.id,
+            author_type: "system",
+            author_name: "System",
+            content: `Task marked as done by manager in Slack.`,
+            sent_to_slack: true,
+          });
+        }
+        const assigneeNames = [...new Set(openTasks.map(t => t.assigned_to_name))].join(", ");
+        await postThreadReply(
+          task.channel_id,
+          task.thread_ts,
+          `✅ Got it! All tasks for *${assigneeNames}* have been marked as done. Follow-ups stopped.`
+        );
+        console.log("[reply] manager marked tasks done:", openTasks.map(t => t.id));
+        return;
+      }
+    }
+  }
+
   const mightBeDone =
     isAssignee &&
-    /\b(done|completed|finished|complete|all done|sorted|submitted|sent|delivered|wrapped up|good to go|ready|all set|handled|accomplished)\b/.test(
-      messageText
-    );
+    doneKeywords.test(messageText);
 
   console.log("[reply] isAssignee:", isAssignee, "mightBeDone:", mightBeDone, "text:", messageText);
 
@@ -817,9 +856,10 @@ async function handleThreadReply(
     return;
   }
 
-  // Non-assignee saying "done" — gently redirect them
+  // Non-assignee (and non-manager) saying "done" — gently redirect them
   const nonAssigneeMightBeDone =
     !isAssignee &&
+    !isManager &&
     /\b(done|completed|finished|complete)\b/i.test(rawText);
   if (nonAssigneeMightBeDone) {
     const allActiveAssigneeNames = [...new Set(
